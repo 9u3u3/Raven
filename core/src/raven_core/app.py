@@ -9,6 +9,7 @@ import io
 import logging
 import os
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
-from watchfiles import watch
+from watchfiles import Change, watch
 
 from . import config, db, events
 from .config import IMAGE_EXTS, THUMB_DIR, VERSION
@@ -68,6 +69,10 @@ async def lifespan(app: FastAPI):
     if _started["done"]:
         indexer.shutdown()
         dir_watch.stop()
+        try:
+            db.conn().execute("PRAGMA optimize")  # PLAN3 P1-7: fresh query statistics for the next start
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _start_services(background: bool = True) -> None:
@@ -113,6 +118,9 @@ def _start_background() -> None:
     from .storage import reclaim
 
     threading.Thread(target=reclaim.disk_loop, args=(indexer.stop,), name="disk-forecast", daemon=True).start()
+    from . import maintenance
+
+    threading.Thread(target=maintenance.loop, args=(indexer.stop,), name="index-maintenance", daemon=True).start()
 
 
 DISCOVERY = config.DATA_DIR / "sidecar.json"
@@ -1388,6 +1396,22 @@ def index_names():
     return hybrid.name_items()
 
 
+@app.get("/index/size")
+def index_size():
+    return db.size_info()
+
+
+@app.post("/index/compact")
+async def index_compact():
+    """Settings, "Make the index smaller" (PLAN3 P0-8)."""
+    from . import maintenance
+
+    info = db.size_info()
+    if not maintenance.disk_room_for_compact(info):
+        raise HTTPException(507, "Not enough free disk space. Compacting needs about the size of the index free.")
+    return await run_in_threadpool(maintenance.run_once, True)
+
+
 @app.post("/index/roots")
 def index_roots(b: RootsBody):
     roots = []
@@ -1573,6 +1597,17 @@ def set_setting(b: SettingBody):
 # ---------------------------------------------------------------- current-folder watcher
 
 
+DIR_MODIFIED_EVERY = 5.0
+_TEMP_SUFFIXES = (".tmp", ".part", ".crdownload", ".swp", ".swx", "~", ".lock")
+
+
+def _dir_watch_filter(_change, path: str) -> bool:
+    name = os.path.basename(path)
+    if name.endswith(_TEMP_SUFFIXES) or name.startswith((".#", "~$")):
+        return False
+    return not name.startswith(".") or bool(db.get_setting("show_hidden", False))
+
+
 class DirWatch:
     """Watch the folder that the renderer shows, so the list updates when other apps change it."""
 
@@ -1590,9 +1625,17 @@ class DirWatch:
         stop = self._stop = threading.Event()
 
         def run():
+            last = 0.0
             try:
-                for _ in watch(path, stop_event=stop, recursive=False, debounce=250, watch_filter=None):
-                    events.publish("dir_changed", path=path)
+                # PLAN3 P0-11: a busy folder (home, Downloads during a download) changes many times each second.
+                # Hidden and temporary files do not reach the list, a batch waits 1 s, and a batch with only
+                # changed files (no name added or removed) goes out at most every 5 s.
+                for changes in watch(path, stop_event=stop, recursive=False, debounce=1000, watch_filter=_dir_watch_filter):
+                    names_changed = any(c != Change.modified for c, _ in changes)
+                    now = time.monotonic()
+                    if names_changed or now - last >= DIR_MODIFIED_EVERY:
+                        last = now
+                        events.publish("dir_changed", path=path)
             except Exception:
                 pass
 

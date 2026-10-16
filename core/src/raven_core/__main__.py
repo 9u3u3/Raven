@@ -100,6 +100,8 @@ def main() -> None:
     _lock_data_dir()
     _watch_parent()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    # watchfiles logs each batch at INFO ("11 changes detected"). The watchers handle the batches.
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
     import uvicorn
 
     from .app import app

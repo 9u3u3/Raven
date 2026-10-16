@@ -86,6 +86,8 @@ write_lock = threading.RLock()
 def _open() -> sqlite3.Connection:
     from . import secure
 
+    new = not DB_PATH.exists() or DB_PATH.stat().st_size == 0
+
     if secure.enabled():
         # Encrypted index (secure.py): SQLCipher with the passphrase that unlocked it.
         pw = secure.passphrase()
@@ -101,10 +103,18 @@ def _open() -> sqlite3.Connection:
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
+    # A new index gives free pages back (PLAN3 P0-8). auto_vacuum takes effect only when it is set before the
+    # file gets its first page, so before journal_mode. An older index changes mode at its first compact().
+    if new:
+        conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
+    # PLAN3 P1-7: temporary tables and sort space in RAM, and reads through the OS page cache (mmap), which all
+    # threads share. SQLCipher ignores mmap_size.
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA mmap_size=268435456")
     # SQLite makes the file, the WAL and the SHM with mode 0644. The data folder is 0700 already, but the
     # files get 0600 too (PLAN3 P0-2). This also covers the file that an encrypt or a decrypt swaps in.
     config.protect_data_files()
@@ -226,3 +236,49 @@ def get_setting(key: str, default: Any = None) -> Any:
 def set_setting(key: str, value: Any) -> None:
     with tx() as c:
         c.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", (key, json.dumps(value)))
+
+
+# ---------------------------------------------------------------- size and compaction (PLAN3 P0-8)
+
+
+def size_info() -> dict:
+    c = conn()
+    page = c.execute("PRAGMA page_size").fetchone()[0]
+    pages = c.execute("PRAGMA page_count").fetchone()[0]
+    free = c.execute("PRAGMA freelist_count").fetchone()[0]
+    wal = DB_PATH.with_name(DB_PATH.name + "-wal")
+    return {
+        "bytes": page * pages,
+        "free_bytes": page * free,
+        "free_share": round(free / pages, 3) if pages else 0.0,
+        "wal_bytes": wal.stat().st_size if wal.exists() else 0,
+        "auto_vacuum": {0: "none", 1: "full", 2: "incremental"}.get(c.execute("PRAGMA auto_vacuum").fetchone()[0], "?"),
+    }
+
+
+def compact() -> dict:
+    """Rebuild the file without free pages, and switch an older index to incremental auto-vacuum. It holds
+    the write lock, so writers wait (readers go on). It needs free disk space of about the size of the index."""
+    before = size_info()
+    c = conn()
+    with write_lock:
+        c.execute("PRAGMA auto_vacuum=INCREMENTAL")
+        c.execute("VACUUM")
+        # VACUUM in WAL mode writes the new file through the WAL. Move it into the database and empty the WAL.
+        c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    after = size_info()
+    return {"before": before, "after": after, "freed_bytes": max(0, before["bytes"] - after["bytes"])}
+
+
+def trim(max_pages: int = 25_600) -> int:
+    """Give at most max_pages free pages back (100 MB with 4 KB pages). Only an incremental index can do this."""
+    c = conn()
+    if c.execute("PRAGMA auto_vacuum").fetchone()[0] != 2:
+        return 0
+    free = c.execute("PRAGMA freelist_count").fetchone()[0]
+    if not free:
+        return 0
+    with write_lock:
+        c.execute(f"PRAGMA incremental_vacuum({int(max_pages)})").fetchall()
+        c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    return free - c.execute("PRAGMA freelist_count").fetchone()[0]

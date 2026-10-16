@@ -1,7 +1,7 @@
 import { Cloud, Cpu, FolderSearch, Folder, KeyRound, Keyboard, Lock, Palette, Plug, Plus, ShieldAlert, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { get, post } from '../lib/api'
-import { tildify } from '../lib/format'
+import { size, tildify } from '../lib/format'
 import { FONTS, POLICY_NAMES, loadPolicies, refreshPrivacy, say, setPref, togglePolicy, useApp, type Font } from '../store'
 import KeyField from '../components/KeyField'
 import ClaudeAccount from '../components/ClaudeAccount'
@@ -240,6 +240,45 @@ function PerformanceSection() {
   )
 }
 
+type IndexSize = { bytes: number; free_bytes: number; free_share: number; auto_vacuum: string }
+
+/** The size of the index file, and "Make the index smaller" (PLAN3 P0-8). Raven also does this by itself when the
+ * laptop is idle and on power. */
+function IndexFile() {
+  const [info, setInfo] = useState<IndexSize | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const load = (): void => void get<IndexSize>('/index/size').then(setInfo).catch(() => {})
+  useEffect(load, [])
+  if (!info) return null
+  const compact = async (): Promise<void> => {
+    setBusy(true)
+    setMsg('')
+    try {
+      const r = await post<{ freed_bytes: number }>('/index/compact', {})
+      setMsg(r.freed_bytes ? `${size(r.freed_bytes)} freed.` : 'The index has no free space to give back.')
+      load()
+    } catch (e) {
+      setMsg((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12.5px]">
+      <span className="text-muted">Index file</span>
+      <span className="mono">{size(info.bytes)}</span>
+      <span className="text-muted">{info.free_bytes ? `${size(info.free_bytes)} of it is free space` : 'no free space inside'}</span>
+      {info.free_share > 0.02 && (
+        <Ghost disabled={busy} onClick={() => void compact()}>
+          {busy ? 'Making it smaller…' : 'Make the index smaller'}
+        </Ghost>
+      )}
+      {msg && <span className="text-muted">{msg}</span>}
+    </div>
+  )
+}
+
 /** Raven as an MCP server (section 13.12 item 1): off by default, with the config block to paste. */
 function McpSection() {
   const [cfg, setCfg] = useState<{ enabled: boolean; config: unknown } | null>(null)
@@ -399,6 +438,7 @@ export default function SettingsScreen() {
                 <Track pct={used * 100} color="var(--accent)" />
               </div>
             )}
+            <IndexFile />
           </Section>
 
           <Section id="appearance" i={2} title="Appearance">
