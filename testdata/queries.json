@@ -1,0 +1,62 @@
+[
+  {
+    "query": "rent agreement",
+    "expected": "Downloads/scan_0042.pdf"
+  },
+  {
+    "query": "invoice for the website design work",
+    "expected": "Downloads/Untitled.docx"
+  },
+  {
+    "query": "curriculum vitae for a python and django backend developer",
+    "expected": "Downloads/Untitled(1).pdf"
+  },
+  {
+    "query": "seven day travel plan for a beach holiday in Goa with flight times",
+    "expected": "Downloads/IMG_2033.md"
+  },
+  {
+    "query": "recipe for pav bhaji",
+    "expected": "Downloads/notes_final_v2.md"
+  },
+  {
+    "query": "savings account statement with PAN and Aadhaar numbers",
+    "expected": "Downloads/statement(2).pdf"
+  },
+  {
+    "query": "postpaid mobile bill with data usage and call charges",
+    "expected": "Downloads/doc_apr.pdf"
+  },
+  {
+    "query": "home work questions about database normalization and normal forms",
+    "expected": "Downloads/hw1.pdf"
+  },
+  {
+    "query": "electricity bill for a flat in Pune with a meter reading",
+    "expected": "Downloads/scan_0043.pdf"
+  },
+  {
+    "query": "railway journey ticket from Pune to Delhi with a berth number",
+    "expected": "Downloads/IMG_2044.pdf"
+  },
+  {
+    "query": "online order confirmation for wireless headphones",
+    "expected": "Downloads/download (7).pdf"
+  },
+  {
+    "query": "shopping list with milk, rice and vegetables",
+    "expected": "Downloads/todo.md"
+  },
+  {
+    "query": "notes on TCP slow start and the congestion window",
+    "expected": "Documents/Sem5/CN/cn_unit4.pdf"
+  },
+  {
+    "query": "notes on B+ tree indexing and range queries",
+    "expected": "Documents/Sem5/DBMS/dbms_unit3.pdf"
+  },
+  {
+    "query": "notes on deadlocks and the banker's algorithm",
+    "expected": "Documents/Sem5/OS/os_unit4.pdf"
+  }
+]

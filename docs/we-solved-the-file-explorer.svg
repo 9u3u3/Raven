@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="DejaVu Sans, Noto Sans, sans-serif">
+  <defs>
+    <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#2c3036"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7fa8d6"/>
+    </marker>
+    <style>
+      .card { fill: #24272c; stroke: #3a3e45; stroke-width: 1.5; }
+      .name { fill: #c9ccd1; font-family: "DejaVu Sans Mono", monospace; font-size: 17px; }
+      .good { fill: #e3e5e8; font-family: "DejaVu Sans Mono", monospace; font-size: 17px; }
+      .folder { fill: #d9b26a; font-family: "DejaVu Sans Mono", monospace; font-size: 18px; font-weight: bold; }
+      .muted { fill: #8f949c; }
+      .tag { fill: #1d2024; stroke: #3a3e45; stroke-width: 1.5; }
+      .tagtext { fill: #c9ccd1; font-size: 17px; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1600" height="900" fill="#17191c"/>
+  <rect width="1600" height="900" fill="url(#dots)"/>
+  <rect x="24" y="24" width="1552" height="852" fill="none" stroke="#2c3036" stroke-width="2"/>
+  <!-- Crop marks, as in the app -->
+  <path d="M24 64 V24 H64" fill="none" stroke="#7fa8d6" stroke-width="4"/>
+  <path d="M1536 876 H1576 V836" fill="none" stroke="#7fa8d6" stroke-width="4"/>
+
+  <!-- Title -->
+  <text x="800" y="128" text-anchor="middle" font-size="40" fill="#8f949c" letter-spacing="6">RAVEN</text>
+  <text x="800" y="210" text-anchor="middle" font-size="76" font-weight="bold" fill="#e3e5e8">We solved the <tspan fill="#7fa8d6">file explorer!</tspan></text>
+  <text x="800" y="256" text-anchor="middle" font-size="24" class="muted">An AI file manager that finds, names, tidies and shrinks your files. Private by design.</text>
+
+  <!-- Left: the chaos -->
+  <text x="150" y="330" font-size="20" font-weight="bold" fill="#e5736a" letter-spacing="3">BEFORE</text>
+  <g>
+    <g transform="translate(110 360) rotate(-7)"><rect class="card" width="300" height="46"/><rect width="6" height="46" fill="#d0908c"/><text class="name" x="20" y="29">IMG_2044.jpg</text></g>
+    <g transform="translate(250 405) rotate(5)"><rect class="card" width="300" height="46"/><rect width="6" height="46" fill="#b4b8be"/><text class="name" x="20" y="29">Untitled(1).pdf</text></g>
+    <g transform="translate(95 450) rotate(3)"><rect class="card" width="300" height="46"/><rect width="6" height="46" fill="#b4b8be"/><text class="name" x="20" y="29">download (3).pdf</text></g>
+    <g transform="translate(230 500) rotate(-9)"><rect class="card" width="300" height="46"/><rect width="6" height="46" fill="#9bc08a"/><text class="name" x="20" y="29">Book1.xlsx</text></g>
+    <g transform="translate(120 548) rotate(6)"><rect class="card" width="300" height="46"/><rect width="6" height="46" fill="#a3be8c"/><text class="name" x="20" y="29">Recording (3).mp3</text></g>
+    <g transform="translate(265 600) rotate(-4)"><rect class="card" width="300" height="46"/><rect width="6" height="46" fill="#b4b8be"/><text class="name" x="20" y="29">fw9 (1).pdf</text></g>
+    <g transform="translate(100 648) rotate(-2)"><rect class="card" width="300" height="46"/><rect width="6" height="46" fill="#d9b26a"/><text class="name" x="20" y="29">New Folder (2)</text></g>
+    <g transform="translate(240 700) rotate(8)"><rect class="card" width="300" height="46"/><rect width="6" height="46" fill="#b4b8be"/><text class="name" x="20" y="29">scan_0042.pdf</text></g>
+  </g>
+  <text x="150" y="800" font-size="18" fill="#e5736a">copies everywhere · names you cannot read</text>
+
+  <!-- Center: Raven -->
+  <path d="M600 520 C 660 520, 680 520, 720 520" fill="none" stroke="#7fa8d6" stroke-width="3" stroke-dasharray="8 8" marker-end="url(#arrow)"/>
+  <path d="M880 520 C 920 520, 940 520, 1000 520" fill="none" stroke="#7fa8d6" stroke-width="3" marker-end="url(#arrow)"/>
+  <g transform="translate(800 520)">
+    <circle r="120" fill="none" stroke="#7fa8d6" stroke-opacity="0.15" stroke-width="2"/>
+    <circle r="95" fill="none" stroke="#7fa8d6" stroke-opacity="0.3" stroke-width="2"/>
+    <rect x="-66" y="-66" width="132" height="132" transform="rotate(45)" fill="#1d2024" stroke="#7fa8d6" stroke-width="3"/>
+    <!-- A feather, the Raven mark -->
+    <path d="M-30 34 C -18 2, 6 -26, 34 -38 C 26 -10, 8 14, -18 30 Z" fill="#7fa8d6"/>
+    <path d="M-30 34 L 18 -20" stroke="#17191c" stroke-width="3"/>
+    <path d="M-34 40 L -24 30" stroke="#7fa8d6" stroke-width="4" stroke-linecap="square"/>
+  </g>
+  <text x="800" y="680" text-anchor="middle" font-size="18" fill="#7fa8d6" letter-spacing="2">SEARCH · REDACT · ORGANIZE · RECLAIM</text>
+  <text x="800" y="708" text-anchor="middle" font-size="16" class="muted">on your laptop</text>
+
+  <!-- Right: the order -->
+  <text x="1060" y="330" font-size="20" font-weight="bold" fill="#8dbf93" letter-spacing="3">AFTER</text>
+  <g>
+    <rect x="1040" y="350" width="470" height="410" fill="#1d2024" stroke="#3a3e45" stroke-width="1.5"/>
+    <text class="folder" x="1068" y="392">▸ Documents</text>
+    <text class="good" x="1086" y="424" fill="#5d6168">├</text><text class="good" x="1108" y="424">Attention Is All You Need.pdf</text>
+    <text class="good" x="1086" y="454" fill="#5d6168">├</text><text class="good" x="1108" y="454">Rent Agreement.pdf</text>
+    <text class="good" x="1086" y="484" fill="#5d6168">└</text><text class="good" x="1108" y="484">Form W-9.pdf</text>
+    <text class="folder" x="1068" y="530">▸ Pictures</text>
+    <text class="good" x="1086" y="562" fill="#5d6168">├</text><text class="good" x="1108" y="562">2025-04-12 Pet.jpg</text>
+    <text class="good" x="1086" y="592" fill="#5d6168">└</text><text class="good" x="1108" y="592">2025-08-14 Receipt.jpg</text>
+    <text class="folder" x="1068" y="638">▸ Recordings</text>
+    <text class="good" x="1086" y="670" fill="#5d6168">└</text><text class="good" x="1108" y="670">Abou Ben Adhem.mp3</text>
+    <rect x="1068" y="696" width="190" height="40" fill="#22332a" stroke="#8dbf93" stroke-width="1.5"/>
+    <text x="1163" y="722" text-anchor="middle" font-size="18" font-weight="bold" fill="#8dbf93">+19.3 GB freed</text>
+    <rect x="1272" y="696" width="214" height="40" fill="#1f2a38" stroke="#7fa8d6" stroke-width="1.5"/>
+    <text x="1379" y="722" text-anchor="middle" font-size="18" font-weight="bold" fill="#7fa8d6">0 B unredacted</text>
+  </g>
+  <text x="1060" y="800" font-size="18" fill="#8dbf93">found in 106 ms · one undo for every change</text>
+
+  <!-- Bottom: what it does -->
+  <g transform="translate(0 836)">
+    <text x="800" y="0" text-anchor="middle" font-size="17" class="muted">Find by meaning, look and speech  ·  Ask with sources  ·  Name unnamed files  ·  Free space safely  ·  Redact before the cloud  ·  Network and root access</text>
+  </g>
+</svg>

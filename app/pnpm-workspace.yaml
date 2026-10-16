@@ -1,0 +1,5 @@
+allowBuilds:
+  electron: true
+  esbuild: true
+minimumReleaseAgeExclude:
+  - electron-vite@6.0.0

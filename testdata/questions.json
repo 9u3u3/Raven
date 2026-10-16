@@ -1,0 +1,14 @@
+[
+  {"q": "What is the late fee in my rent agreement?", "file": "Downloads/scan_0042.pdf", "page": 1, "answer": ["500"]},
+  {"q": "How much is the security deposit for the flat?", "file": "Downloads/scan_0042.pdf", "page": 1, "answer": ["85,000"]},
+  {"q": "What is the total payable on the website design invoice?", "file": "Downloads/Untitled.docx", "answer": ["86,730"]},
+  {"q": "When is my phone bill due?", "file": "Downloads/doc_apr.pdf", "answer": ["25 April"]},
+  {"q": "How many units of electricity did I use?", "file": "Downloads/scan_0043.pdf", "answer": ["218"]},
+  {"q": "What is the PNR of my train ticket to Delhi?", "file": "Downloads/IMG_2044.pdf", "answer": ["4471882290"]},
+  {"q": "When is the Operating Systems exam and in which room?", "file": "Downloads/hall_ticket.pdf", "answer": ["21 October", "312"]},
+  {"q": "What headphones did I order and what did they cost?", "file": "Downloads/download (7).pdf", "answer": ["2,349"]},
+  {"q": "What is the departure time of the Azad Hind Express?", "file": "Downloads/IMG_2044.pdf", "answer": ["23:10"]},
+  {"q": "How long is the lease period?", "file": "Downloads/scan_0042.pdf", "answer": ["22 months"]},
+  {"q": "What is the boiling point of tungsten?", "file": null, "answer": []},
+  {"q": "Who won the football world cup in 1998?", "file": null, "answer": []}
+]

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" font-family="IBM Plex Sans, Helvetica, Arial, sans-serif">
+<rect width="1200" height="760" fill="#FAFAF7"/>
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6E6E68"/></marker></defs>
+<text x="40" y="44" font-size="22" font-weight="600" fill="#121212">Raven</text>
+<text x="120" y="44" font-size="14" fill="#6E6E68">finds, organizes and shrinks your files. Private data never leaves unredacted.</text>
+<rect x="40" y="70" width="1120" height="110" fill="none" stroke="#BDBDB5" stroke-width="1"/>
+<text x="54" y="94" font-size="15" font-weight="600" fill="#121212">Electron app</text>
+<text x="54" y="116" font-size="13" fill="#6E6E68">Renderer (React): Files · Space · Organize · Privacy · command bar for Find, Ask and Act</text>
+<text x="54" y="135" font-size="13" fill="#6E6E68">Main process: starts the sidecar and Ollama · egress guard: the renderer reaches 127.0.0.1 only</text>
+<line x1="600" y1="180" x2="600" y2="222" stroke="#6E6E68" stroke-width="1" marker-end="url(#a)"/>
+<text x="606.0" y="197.0" font-size="12" fill="#6E6E68">HTTP + WebSocket, random port and token</text>
+<rect x="40" y="225" width="1120" height="300" fill="none" stroke="#0B7A55" stroke-width="1"/>
+<text x="54" y="249" font-size="15" font-weight="600" fill="#0B7A55">Python sidecar raven-core (FastAPI on 127.0.0.1)</text>
+<rect x="60" y="270" width="200" height="130" fill="none" stroke="#BDBDB5" stroke-width="1"/>
+<text x="74" y="294" font-size="15" font-weight="600" fill="#121212">fs</text>
+<text x="74" y="316" font-size="13" fill="#6E6E68">operations, undo journal</text>
+<text x="74" y="335" font-size="13" fill="#6E6E68">copy queue, trash</text>
+<text x="74" y="354" font-size="13" fill="#6E6E68">archives, rclone</text>
+<text x="74" y="373" font-size="13" fill="#6E6E68">administrator retries</text>
+<rect x="280" y="270" width="200" height="130" fill="none" stroke="#BDBDB5" stroke-width="1"/>
+<text x="294" y="294" font-size="15" font-weight="600" fill="#121212">index + media</text>
+<text x="294" y="316" font-size="13" fill="#6E6E68">extract, chunk, OCR</text>
+<text x="294" y="335" font-size="13" fill="#6E6E68">embeddings, PII spans</text>
+<text x="294" y="354" font-size="13" fill="#6E6E68">SigLIP 2: photos, pages, frames</text>
+<text x="294" y="373" font-size="13" fill="#6E6E68">Whisper transcripts</text>
+<rect x="500" y="270" width="200" height="130" fill="none" stroke="#BDBDB5" stroke-width="1"/>
+<text x="514" y="294" font-size="15" font-weight="600" fill="#121212">search</text>
+<text x="514" y="316" font-size="13" fill="#6E6E68">BM25 (FTS5), vectors</text>
+<text x="514" y="335" font-size="13" fill="#6E6E68">binary vectors + rescore</text>
+<text x="514" y="354" font-size="13" fill="#6E6E68">RRF, reranker</text>
+<text x="514" y="373" font-size="13" fill="#6E6E68">LLM filters, folders</text>
+<rect x="720" y="270" width="200" height="130" fill="none" stroke="#BDBDB5" stroke-width="1"/>
+<text x="734" y="294" font-size="15" font-weight="600" fill="#121212">AI features</text>
+<text x="734" y="316" font-size="13" fill="#6E6E68">Ask with citations</text>
+<text x="734" y="335" font-size="13" fill="#6E6E68">agent with review</text>
+<text x="734" y="354" font-size="13" fill="#6E6E68">classify, organize, learn</text>
+<text x="734" y="373" font-size="13" fill="#6E6E68">watch rules, file map</text>
+<rect x="940" y="270" width="200" height="130" fill="none" stroke="#BDBDB5" stroke-width="1"/>
+<text x="954" y="294" font-size="15" font-weight="600" fill="#121212">privacy + router</text>
+<text x="954" y="316" font-size="13" fill="#6E6E68">PII layer 1 + layer 2</text>
+<text x="954" y="335" font-size="13" fill="#6E6E68">redaction gate, ledger</text>
+<text x="954" y="354" font-size="13" fill="#6E6E68">T2 local, T3 cloud</text>
+<text x="954" y="373" font-size="13" fill="#6E6E68">MCP gate (read only)</text>
+<text x="60" y="440" font-size="13" fill="#6E6E68">One owner for the file system: every change goes through the journal, so one undo covers manual actions, the agent, organize plans, rules and compression.</text>
+<text x="60" y="462" font-size="13" fill="#6E6E68">Background stages: names, then text, then meaning, then PII layer 2, appearance and speech, each at a lower priority, and each stops for interactive work.</text>
+<rect x="40" y="590" width="330" height="130" fill="none" stroke="#BDBDB5" stroke-width="1"/>
+<text x="54" y="614" font-size="15" font-weight="600" fill="#121212">SQLite or SQLCipher</text>
+<text x="54" y="636" font-size="13" fill="#6E6E68">files, chunks, FTS5, sqlite-vec</text>
+<text x="54" y="655" font-size="13" fill="#6E6E68">journal, ledger, settings</text>
+<text x="54" y="674" font-size="13" fill="#6E6E68">encrypted with a passphrase (optional)</text>
+<rect x="435" y="590" width="330" height="130" fill="none" stroke="#BDBDB5" stroke-width="1"/>
+<text x="449" y="614" font-size="15" font-weight="600" fill="#121212">Ollama on the GPU</text>
+<text x="449" y="636" font-size="13" fill="#6E6E68">embeddinggemma (meaning)</text>
+<text x="449" y="655" font-size="13" fill="#6E6E68">qwen3:4b (Ask, plans, names)</text>
+<text x="449" y="674" font-size="13" fill="#6E6E68">loopback only</text>
+<rect x="830" y="590" width="330" height="130" fill="none" stroke="#BDBDB5" stroke-width="1"/>
+<text x="844" y="614" font-size="15" font-weight="600" fill="#121212">Outside the laptop</text>
+<text x="844" y="636" font-size="13" fill="#6E6E68">Groq, claude -p: redacted text only</text>
+<text x="844" y="655" font-size="13" fill="#6E6E68">MCP clients: redacted, logged</text>
+<text x="844" y="674" font-size="13" fill="#6E6E68">every byte in the Privacy ledger</text>
+<line x1="205" y1="525" x2="205" y2="588" stroke="#6E6E68" stroke-width="1" marker-end="url(#a)"/>
+<line x1="600" y1="525" x2="600" y2="588" stroke="#6E6E68" stroke-width="1" marker-end="url(#a)"/>
+<line x1="995" y1="525" x2="995" y2="588" stroke="#6E6E68" stroke-width="1" marker-end="url(#a)"/>
+<text x="1001.0" y="552.5" font-size="12" fill="#6E6E68">after redaction</text>
+</svg>

@@ -1,0 +1,36 @@
+node_modules/
+out/
+dist/
+.venv/
+__pycache__/
+*.pyc
+models/*
+!models/.gitkeep
+.pytest_cache/
+testdata/home/
+core/build/
+core/dist/
+app/release/
+core/*.log
+testdata/device/
+testdata/device_manifest.json
+testdata/.video_cache/
+
+# env and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# local-only docs (plans, pitch, notes)
+/PLAN.md
+/PLAN2.md
+/pitch.md
+/technical_details.md
+/guide.md
+/CLAUDE.md
+/testdata/DEMO_HOME.md
+/docs/raven-ps3.pptx
+/testdata/make_demo_home.py
+/testdata/run_demo.sh
+/docs/pipelines/10-demo-kit.*
