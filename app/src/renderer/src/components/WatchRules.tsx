@@ -176,7 +176,7 @@ export default function WatchRules() {
             {examples.map((x, k) => (
               <li key={x.id} style={stagger(k)} className="anim-row group flex items-baseline gap-3 border-b border-line/70 py-2.5">
                 <span className="mono truncate text-[12.5px]">{x.name}</span>
-                <span className="serif  text-muted">is</span>
+                <span className="text-muted">is</span>
                 <span className="serif text-[18px]  text-accent">{x.category}</span>
                 <span className="ml-auto" />
                 <button className="link text-muted opacity-0 transition-all hover:text-danger group-hover:opacity-100" onClick={() => void del(`/learn/examples/${x.id}`).then(load)}>

@@ -9,13 +9,24 @@ const SCREENS: [Screen, string][] = [
   ['privacy', 'Privacy']
 ]
 
-/** The Raven mark: a folded wing, drawn in one stroke weight. */
+/** The Raven mark, the same as on the site (raven-site/assets/mark.svg): three facets and an eye. */
 export function Mark({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" aria-hidden className="shrink-0 text-accent">
-      <path d="M3 21C6 12 12 7 25 5c-2 4-5 6-9 7 3 .6 5 .3 7-.4-1.5 3.4-4.800 5.200-9.500 5.400 1.800.7 3.200.8 4.500.5-2 2.800-5.300 4-10 3.600C8.500 20.900 5.800 21.200 3 21Z" fill="currentColor" />
-      <path d="M3 21c4-1 7-3.500 10-7" stroke="var(--bg)" strokeWidth="1" strokeLinecap="round" opacity="0.55" />
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden className="shrink-0">
+      <path fill="var(--mark-1)" d="M21 11 34 10 44 20 57 25 61 33 40 31 21 31Z" />
+      <path fill="var(--mark-2)" d="M21 31 40 31 61 33 46 37 37 46 31 45 27 53 22 46 12 53Z" />
+      <path fill="var(--mark-3)" d="M21 11 21 31 12 53 6 33 11 17Z" />
+      <path fill="var(--bg)" d="M28 17h5v5h-5Z" />
     </svg>
+  )
+}
+
+/** The word "raven" as on the site lockup: Archivo, heavy, tight. */
+export function Wordmark({ size = 19 }: { size?: number }) {
+  return (
+    <span className="leading-none" style={{ fontFamily: 'var(--font-disp)', fontWeight: 900, fontSize: size, letterSpacing: '-0.045em' }}>
+      raven
+    </span>
   )
 }
 
@@ -29,7 +40,7 @@ function RotatingHint() {
     return () => clearInterval(t)
   }, [])
   return (
-    <span key={i} className="anim-row min-w-0 flex-1 truncate " style={{ fontFamily: 'var(--font-serif)', fontSize: '1.08rem' }}>
+    <span key={i} className="anim-row min-w-0 flex-1 truncate " style={{ fontFamily: 'var(--font-disp)', fontSize: '1.08rem' }}>
       {HINTS[i]}
     </span>
   )
@@ -66,8 +77,8 @@ export default function TopBar() {
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-line px-6">
       <div className="flex items-center gap-2.5">
-        <Mark size={18} />
-        <span className="text-[17px] font-semibold leading-none tracking-tight">Raven</span>
+        <Mark size={24} />
+        <Wordmark />
       </div>
 
       <nav ref={nav} data-tour="nav" className="relative flex h-full items-center gap-7">

@@ -75,8 +75,9 @@ export default function StatusLine() {
       </button>
       <span className="text-muted/50">·</span>
       <button className="link min-w-0 truncate text-muted transition-colors hover:text-text" onClick={() => setScreen('privacy')} title="See every payload in the privacy ledger">
-        Today: {privacy?.today.calls ?? 0} cloud call{privacy?.today.calls === 1 ? '' : 's'}, {size(privacy?.today.bytes ?? 0) || '0 B'} sent, {privacy?.today.pii_sent ?? 0} PII items
-        {(privacy?.today.mcp_calls ?? 0) > 0 && `, ${privacy?.today.mcp_calls} MCP answers`}
+        {privacy?.today.calls ?? 0} cloud call{privacy?.today.calls === 1 ? '' : 's'} today · {size(privacy?.today.bytes ?? 0) || '0 B'} sent
+        {(privacy?.today.pii_sent ?? 0) > 0 && ` · ${privacy?.today.pii_sent} private items sent`}
+        {(privacy?.today.mcp_calls ?? 0) > 0 && ` · ${privacy?.today.mcp_calls} MCP answers`}
       </button>
       {free && (
         <>

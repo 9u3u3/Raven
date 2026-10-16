@@ -52,7 +52,8 @@ def main() -> int:
     ap.add_argument("--screens", default=",".join(SCREENS))
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--tag", default="")
-    ap.add_argument("--fonts", default="", help="commit,geist,jetbrains,plex,system: one screenshot set per font")
+    ap.add_argument("--fonts", default="", help="inter,commit,geist,jetbrains,plex,system: one screenshot set per font")
+    ap.add_argument("--theme", default="", help="light or dark (default: follow the system)")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -69,7 +70,7 @@ def main() -> int:
     runs = [(f, z, c) for f in (a.fonts.split(",") if a.fonts else [""]) for z in a.sizes.split(",") for c in a.screens.split(",")]
     for font, size, screen in runs:
         name = f"{screen}-{size}{'-' + font if font else ''}{'-' + a.tag if a.tag else ''}.png"
-        env.update(RAVEN_SHOT=str(out / name), RAVEN_SHOT_SIZE=size, RAVEN_SHOT_SCREEN=screen, RAVEN_SHOT_FONT=font,
+        env.update(RAVEN_SHOT=str(out / name), RAVEN_SHOT_SIZE=size, RAVEN_SHOT_SCREEN=screen, RAVEN_SHOT_FONT=font, RAVEN_SHOT_THEME=a.theme,
                    RAVEN_SHOT_PATH=str(Path(root) / "Downloads") if screen == "files" else "")
         r = subprocess.run([str(electron), "."], cwd=APP, env=env, capture_output=True, text=True, timeout=120)
         ok = (out / name).exists()

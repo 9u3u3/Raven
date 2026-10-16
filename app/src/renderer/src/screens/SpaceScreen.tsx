@@ -179,7 +179,7 @@ function Breadcrumb({ tree, home }: { tree: SpaceNode; home: string }) {
       <span className="sec-no">02</span>
       {parts.map((p, i) => (
         <span key={p.path} className="flex items-baseline">
-          {i > 0 && <span className="serif px-1.5 text-[17px]  leading-none text-muted/60">/</span>}
+          {i > 0 && <span className="px-1 leading-none text-muted/60">/</span>}
           <button className={`link py-0.5 ${i === parts.length - 1 ? 'text-text' : 'text-muted hover:text-text'}`} onClick={() => void loadPath(p.path)}>
             {p.label}
           </button>
@@ -364,7 +364,7 @@ function reviewNear(groups: DupeGroup[]): void {
     g.files.filter((f) => !f.keep).map((f) => ({ path: f.path, size: f.size, checked: false, note: `${f.pixels ?? ''}, looks like ${g.files.find((x) => x.keep)?.path.split('/').pop()} (${g.files.find((x) => x.keep)?.pixels ?? ''})` }))
   )
   openReview({
-    title: `${groups.length} sets of similar photos. Check the photos to move to the trash. The one with the highest resolution of each set stays.`,
+    title: `${groups.length} sets of similar photos. The sharpest photo of each set stays. Checked photos go to the trash.`,
     reversible: true,
     cloudBytes: 0,
     frees: true,

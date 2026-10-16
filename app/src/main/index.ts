@@ -266,7 +266,7 @@ function createWindow(): void {
     title: 'Raven',
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0F100F' : '#FAFAF7',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#131217' : '#f7f6fa',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true, // PLAN3 P1-1: the preload uses only contextBridge, ipcRenderer and webUtils
@@ -297,7 +297,8 @@ function createWindow(): void {
   if (shot) {
     win.webContents.once('did-finish-load', () => {
       // RAVEN_SHOT_SCREEN (files, space, organize, privacy, settings, ask) and RAVEN_SHOT_PATH pick the view.
-      const view = JSON.stringify({ screen: process.env.RAVEN_SHOT_SCREEN || '', path: process.env.RAVEN_SHOT_PATH || '', font: process.env.RAVEN_SHOT_FONT || '' })
+      // RAVEN_SHOT_FONT and RAVEN_SHOT_THEME (light, dark) set the look.
+      const view = JSON.stringify({ screen: process.env.RAVEN_SHOT_SCREEN || '', path: process.env.RAVEN_SHOT_PATH || '', font: process.env.RAVEN_SHOT_FONT || '', theme: process.env.RAVEN_SHOT_THEME || '' })
       setTimeout(() => void win?.webContents.executeJavaScript(`window.__ravenShot && window.__ravenShot(${view})`), 2500)
       setTimeout(async () => {
         const img = await win!.webContents.capturePage()

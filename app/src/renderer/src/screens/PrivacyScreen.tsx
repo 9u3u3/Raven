@@ -42,7 +42,6 @@ function ModePicker({ mode }: { mode: AiMode }) {
 
 /** The path a cloud call takes, in one line: what the gate does in this mode. */
 function Path({ mode }: { mode: AiMode }) {
-  const gate = mode === 'local' ? 'closed' : mode === 'ask' ? 'you approve each send' : 'redacts names, numbers and secrets'
   return (
     <div className="mt-4 flex items-center gap-3 text-[12.5px]">
       <span>Your files</span>
@@ -52,7 +51,6 @@ function Path({ mode }: { mode: AiMode }) {
       </span>
       <span className={`h-px w-8 ${mode === 'local' ? 'border-t border-dashed border-muted/60' : 'bg-line'}`} />
       <span className={mode === 'local' ? 'text-muted line-through' : ''}>Cloud</span>
-      <span className="ml-2 text-muted">· {gate}</span>
     </div>
   )
 }

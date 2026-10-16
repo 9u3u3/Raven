@@ -123,7 +123,7 @@ export default function ResultsScreen() {
           }}
           placeholder="Search by name, path, words or meaning"
           className="flex-1 border-0 text-[18px] placeholder:text-muted/70 hover:bg-transparent focus:bg-transparent"
-          style={{ fontFamily: 'var(--font-serif)', letterSpacing: '-0.01em' }}
+          style={{ fontFamily: 'var(--font-disp)', letterSpacing: '-0.01em' }}
         />
         {(find.pending || folderFind.pending) && (
           <span className="relative h-px w-14 overflow-hidden bg-line">

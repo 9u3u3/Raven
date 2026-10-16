@@ -80,7 +80,7 @@ export default function SizeChart({
     const muted = css('--muted')
     const bg = css('--bg')
     const data = toData(tree.children ?? [], colors, css('--accent'), mode === 'treemap' ? 1 : 2, css('--surface-2'))
-    const mono = 'ui-monospace, monospace'
+    const mono = css('--font-mono') || 'monospace'
     const tooltip = {
       backgroundColor: css('--console-bg'),
       borderWidth: 0,

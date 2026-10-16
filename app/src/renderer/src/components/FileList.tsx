@@ -185,7 +185,7 @@ export default function FileList() {
                             ≠ {e.sniffed_kind}
                           </span>
                         )}
-                        {e.category && <span className="serif shrink-0 text-[15px]  leading-none text-accent">{e.category}</span>}
+                        {e.category && <span className="label shrink-0 leading-none !text-accent">{e.category}</span>}
                       </div>
                     )}
                   </div>

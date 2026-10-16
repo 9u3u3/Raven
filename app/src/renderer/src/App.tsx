@@ -344,13 +344,20 @@ async function boot(): Promise<void> {
 }
 
 // Test hook for screenshots (main process, RAVEN_SHOT_SCREEN): open a screen or a folder.
-;(window as unknown as { __ravenShot: (v: { screen: string; path: string; font?: string }) => void }).__ravenShot = ({ screen, path, font }) => {
+;(window as unknown as { __ravenShot: (v: { screen: string; path: string; font?: string; theme?: string }) => void }).__ravenShot = ({ screen, path, font, theme }) => {
   if (path) void navigate(path)
   if (screen === 'graph') {
     setScreen('organize')
     useApp.setState({ organizeView: 'map' })
   } else if (screen) setScreen(screen as Parameters<typeof setScreen>[0])
   if (font) useApp.setState({ font: font as Font })
+  if (theme === 'light' || theme === 'dark') {
+    // A hidden window does not run transitions to their end, so colors would stay at the old theme.
+    const st = document.createElement('style')
+    st.textContent = '*, *::before, *::after { transition: none !important; }'
+    document.head.appendChild(st)
+    useApp.setState({ theme })
+  }
 }
 
 export default function App() {

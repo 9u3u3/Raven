@@ -1,5 +1,8 @@
 import { createRoot } from 'react-dom/client'
-// Mono fonts in the style of Berkeley Mono (PLAN2 P2-10.1). Bundled: the egress guard blocks web fonts.
+// Fonts are bundled: the egress guard blocks web fonts. Inter and Archivo as on the site, and mono fonts
+// in the style of Berkeley Mono (PLAN2 P2-10.1).
+import '@fontsource-variable/inter'
+import '@fontsource-variable/archivo'
 import '@fontsource/commit-mono/400.css'
 import '@fontsource/commit-mono/500.css'
 import '@fontsource/commit-mono/600.css'

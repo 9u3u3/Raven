@@ -402,7 +402,6 @@ export default function SettingsScreen() {
     <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
       <div className="flex gap-4 px-4 pb-6 pt-6">
         <nav className="sticky top-0 hidden h-fit w-[200px] shrink-0 self-start pt-2 md:block">
-          <div className="label mb-4">Contents</div>
           {NAV.map(([id, label], n) => (
             <button key={id} onClick={() => jump(id)} className="group relative flex w-full items-baseline gap-3 py-1.5 text-left">
               <span className={`serif w-6 text-[17px]  leading-none transition-colors duration-300 ${here === id ? 'text-accent' : 'text-muted/70'}`}>{String(n + 1).padStart(2, '0')}</span>
@@ -433,7 +432,7 @@ export default function SettingsScreen() {
               </button>
               <input
                 value={manual}
-                placeholder="or type a path and press Enter"
+                placeholder="or type a path"
                 spellCheck={false}
                 onChange={(e) => setManual(e.target.value)}
                 onKeyDown={(e) => {
@@ -463,8 +462,8 @@ export default function SettingsScreen() {
             <div className="mb-5 grid grid-cols-3 gap-3">
               {(['system', 'light', 'dark'] as const).map((t) => {
                 const on = theme === t
-                const light = { bg: '#f4f5f7', bar: '#d9dce1', ink: '#1b1e22', acc: '#2d6cb5' }
-                const dark = { bg: '#202226', bar: '#34373d', ink: '#e3e5e8', acc: '#7fa8d6' }
+                const light = { bg: '#f7f6fa', bar: '#dedae7', ink: '#17151d', acc: '#6a4ce0' }
+                const dark = { bg: '#131217', bar: '#33303d', ink: '#ebe8f2', acc: '#a88bfa' }
                 const pick = (c: typeof light): React.ReactNode => (
                   <div className="flex h-full flex-1 flex-col gap-1.5 p-2.5" style={{ background: c.bg }}>
                     <span className="h-1.5 w-8 rounded-full" style={{ background: c.acc }} />
@@ -526,9 +525,7 @@ export default function SettingsScreen() {
               <KeyField provider="anthropic" setting="anthropic_api_key" label="Anthropic API key" placeholder="sk-ant-… (console.anthropic.com)" stored={settings.anthropic_api_key as string} onSaved={() => void reload()} />
               <span className="text-muted">Where keys are stored</span>
               <span className="text-[12px] text-muted">
-                {settings.key_store === 'keyring'
-                  ? 'In the system keyring, not in the index.'
-                  : 'In the index on this computer (only your user can read it). Start a system keyring (GNOME Keyring, KWallet) to keep them out of the index.'}
+                {settings.key_store === 'keyring' ? 'System keyring' : 'The index on this computer. Start GNOME Keyring or KWallet to use a keyring.'}
               </span>
               <span className="text-muted">Anthropic model</span>
               <select value={(settings.anthropic_model as string) || 'claude-sonnet-5-5'} onChange={(e) => void setSetting('anthropic_model', e.target.value)} className="field mono w-full max-w-[420px]">
@@ -577,7 +574,7 @@ export default function SettingsScreen() {
                 }}
               />
             </Row>
-            <Row label="Full view" text="The root folder in the left column, hidden files, system folders marked.">
+            <Row label="Full view" text="Root folder, hidden files and system folders in the left column.">
               <Switch
                 on={fullView}
                 label="Full view"

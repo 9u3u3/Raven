@@ -15,8 +15,8 @@ const css = (v: string): string => getComputedStyle(document.documentElement).ge
 
 // The category tints of the Space chart are for large areas. Small points need the tints of the other
 // theme: light tints on the dark background, dark tints on the light one.
-const LIGHT_TINTS = ['#c9bddb', '#e3cdb0', '#bccfe0', '#d9d2a6', '#e2bcbc', '#bcd6c6']
-const DARK_TINTS = ['#6b5d8c', '#8a6d4e', '#4d6a87', '#7a7444', '#855252', '#477a5e']
+const LIGHT_TINTS = ['#c4b0ff', '#e3c58f', '#a9c8f5', '#a6dcc9', '#f0b3b3', '#c6e2a8']
+const DARK_TINTS = ['#6a4ce0', '#a8761c', '#2f6bd0', '#1f8a7b', '#c2453f', '#4f8a3a']
 function darkBg(): boolean {
   const m = /#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(css('--bg'))
   return !!m && parseInt(m[1], 16) + parseInt(m[2], 16) + parseInt(m[3], 16) < 384

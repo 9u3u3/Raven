@@ -174,7 +174,7 @@ export default function PathLine() {
           <div ref={crumbBox} className="flex min-w-0 items-center overflow-hidden whitespace-nowrap" title={`${path}\nEdit path (Ctrl+L)`}>
             {visible.map((c, i) => (
               <span key={`${c.label}:${c.path}`} className="flex shrink-0 items-center">
-                {i > 0 && c.label !== '/' && visible[i - 1].label !== '/' && <span className="serif px-1.5 text-[17px]  leading-none text-muted/60">/</span>}
+                {i > 0 && c.label !== '/' && visible[i - 1].label !== '/' && <span className="px-1 leading-none text-muted/60">/</span>}
                 <button
                   onClick={() => void navigate(c.path)}
                   onDragOver={dragOver}

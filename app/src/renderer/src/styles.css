@@ -1,18 +1,14 @@
 @import "tailwindcss";
 
-/*
-  Raven's look: quiet and native. The system font, neutral slate or light gray, one blue accent, hairlines instead of boxes.
-  Every color is a CSS variable, so light, dark and system all follow the same tokens.
-*/
 @theme {
   --radius-*: initial;
-  --radius-xs: 2px;
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-xl: 6px;
-  --radius-2xl: 8px;
-  --radius-3xl: 10px;
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
   --radius-full: 9999px;
   --shadow-*: initial;
   --shadow-soft: 0 1px 0 rgb(0 0 0 / 0.12);
@@ -21,15 +17,20 @@
   --drop-shadow-*: initial;
   --blur-*: initial;
   --blur-md: 6px;
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
-  --font-serif: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --font-disp: "Archivo Variable", "Inter Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-faint: var(--faint);
+  --color-sunk: var(--sunk);
+  --color-warn: var(--warn);
+  --color-info: var(--info);
   --color-hover: var(--hover);
   --color-select: var(--select);
   --color-accent: var(--accent);
@@ -48,116 +49,147 @@
   --color-k-sheet: var(--k-sheet);
 }
 
+/*
+  Raven's look: "ink", the same tokens as the Raven site (raven-site/theme/tokens.css). Purple on a
+  black with a violet tint, one purple for focus and the active item, square corners, 1px lines.
+  Light is the same family on paper. Every color is a CSS variable, so light, dark and system follow one set.
+*/
 :root {
-  --bg: #f4f5f7;
-  --surface: #ecedf0;
-  --surface-2: #e2e4e8;
-  --text: #1b1e22;
-  --muted: #6a7079;
-  --line: #d9dce1;
-  --hover: #eaebee;
-  --select: #dbe6f4;
-  --accent: #2d6cb5;
-  --accent-soft: rgb(45 108 181 / 0.11);
-  --danger: #b8453a;
-  --ok: #3f7a4f;
-  --console-bg: #1a1d21;
-  --console-text: #b8c7da;
+  --bg: #f7f6fa;
+  --surface: #efedf4;
+  --surface-2: #e6e3ee;
+  --sunk: #fbfbfd;
+  --text: #17151d;
+  --muted: #67637a;
+  --faint: #8d89a0;
+  --line: #dedae7;
+  --line-2: #cbc6d8;
+  --hover: #eeecf4;
+  --select: #e7e0fd;
+  --accent: #6a4ce0;
+  --accent-soft: rgb(106 76 224 / 0.1);
   --on-accent: #ffffff;
+  --danger: #c2453f;
+  --ok: #2f8a4c;
+  --warn: #a8761c;
+  --info: #2f6bd0;
+  --teal: #1f8a7b;
+  --console-bg: #131217;
+  --console-text: #c3bfcf;
+  --mark-1: #a88bfa;
+  --mark-2: #5b3fd6;
+  --mark-3: #7c5cf0;
+  --grid: #efedf4;
+  --k-folder: #b0831f;
+  --k-image: #bd5a63;
+  --k-video: #3f6fc6;
+  --k-audio: #3f8a55;
+  --k-archive: #b06a3a;
+  --k-doc: #6f6b80;
+  --k-code: #1f8a7b;
+  --k-sheet: #4f8a3a;
+  --cat-0: #c9bdf5;
+  --cat-1: #e6bcc0;
+  --cat-2: #b3d3f0;
+  --cat-3: #e8d6a6;
+  --cat-4: #b8e0d6;
+  --cat-5: #c6e2b4;
+  --cat-6: #d6d2e0;
+  --cat-7: #e6e3ee;
+  color-scheme: light;
   --ui-scale: 1;
   --grain: 0;
   --grain-blend: normal;
-  --k-folder: #b58a2f;
-  --k-image: #b0645b;
-  --k-video: #4f78a8;
-  --k-audio: #6a8a4d;
-  --k-archive: #a96a45;
-  --k-doc: #70757d;
-  --k-code: #3f7d75;
-  --k-sheet: #62874c;
-  --cat-0: #b3c3da;
-  --cat-1: #dcb7ad;
-  --cat-2: #a9cbd8;
-  --cat-3: #d8cf9f;
-  --cat-4: #dcaab3;
-  --cat-5: #a9d0b9;
-  --cat-6: #cfd1d5;
-  --cat-7: #dcdee2;
-  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #202226;
-    --surface: #26282d;
-    --surface-2: #2d3036;
-    --text: #e3e5e8;
-    --muted: #8f949c;
-    --line: #34373d;
-    --hover: #282b30;
-    --select: #2f3a4a;
-    --accent: #7fa8d6;
-    --accent-soft: rgb(127 168 214 / 0.14);
-    --danger: #e5736a;
-    --ok: #8dbf93;
-    --console-bg: #15171a;
-    --console-text: #b8c7da;
-    --on-accent: #0f1722;
-    --grain: 0;
-    --grain-blend: normal;
-    --k-folder: #d9b26a;
-    --k-image: #d0908c;
-    --k-video: #8aa4c8;
-    --k-audio: #a3be8c;
-    --k-archive: #d19a73;
-    --k-doc: #b4b8be;
-    --k-code: #7fb5ad;
-    --k-sheet: #9bc08a;
-    --cat-0: #4f6a8f;
-    --cat-1: #8a5f55;
-    --cat-2: #46788a;
-    --cat-3: #857a4a;
-    --cat-4: #84505e;
-    --cat-5: #4b8466;
-    --cat-6: #5c6068;
-    --cat-7: #43464c;
+    --bg: #131217;
+    --surface: #1a191f;
+    --surface-2: #222028;
+    --sunk: #0e0d11;
+    --text: #ebe8f2;
+    --muted: #9a96a8;
+    --faint: #77738a;
+    --line: #24222b;
+    --line-2: #33303d;
+    --hover: #1d1c23;
+    --select: #29233f;
+    --accent: #a88bfa;
+    --accent-soft: rgb(168 139 250 / 0.1);
+    --on-accent: #131217;
+    --danger: #ef8a8a;
+    --ok: #8fd19e;
+    --warn: #e3b763;
+    --info: #8ab4f8;
+    --teal: #7fd1c4;
+    --console-bg: #0e0d11;
+    --console-text: #c3bfcf;
+    --mark-1: #c4b0ff;
+    --mark-2: #7c5cf0;
+    --mark-3: #a88bfa;
+    --grid: #1b1a20;
+    --k-folder: #e3b763;
+    --k-image: #ef9a9a;
+    --k-video: #8ab4f8;
+    --k-audio: #8fd19e;
+    --k-archive: #e0a37a;
+    --k-doc: #a9a5b8;
+    --k-code: #7fd1c4;
+    --k-sheet: #a6d49a;
+    --cat-0: #5b4a96;
+    --cat-1: #8a4f5a;
+    --cat-2: #3f5f8f;
+    --cat-3: #85703f;
+    --cat-4: #3f7a70;
+    --cat-5: #4f7a45;
+    --cat-6: #3a3745;
+    --cat-7: #2a2831;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #202226;
-  --surface: #26282d;
-  --surface-2: #2d3036;
-  --text: #e3e5e8;
-  --muted: #8f949c;
-  --line: #34373d;
-  --hover: #282b30;
-  --select: #2f3a4a;
-  --accent: #7fa8d6;
-  --accent-soft: rgb(127 168 214 / 0.14);
-  --danger: #e5736a;
-  --ok: #8dbf93;
-  --console-bg: #15171a;
-  --console-text: #b8c7da;
-  --on-accent: #0f1722;
-  --grain: 0;
-  --grain-blend: normal;
-  --k-folder: #d9b26a;
-  --k-image: #d0908c;
-  --k-video: #8aa4c8;
-  --k-audio: #a3be8c;
-  --k-archive: #d19a73;
-  --k-doc: #b4b8be;
-  --k-code: #7fb5ad;
-  --k-sheet: #9bc08a;
-  --cat-0: #4f6a8f;
-  --cat-1: #8a5f55;
-  --cat-2: #46788a;
-  --cat-3: #857a4a;
-  --cat-4: #84505e;
-  --cat-5: #4b8466;
-  --cat-6: #5c6068;
-  --cat-7: #43464c;
+  --bg: #131217;
+  --surface: #1a191f;
+  --surface-2: #222028;
+  --sunk: #0e0d11;
+  --text: #ebe8f2;
+  --muted: #9a96a8;
+  --faint: #77738a;
+  --line: #24222b;
+  --line-2: #33303d;
+  --hover: #1d1c23;
+  --select: #29233f;
+  --accent: #a88bfa;
+  --accent-soft: rgb(168 139 250 / 0.1);
+  --on-accent: #131217;
+  --danger: #ef8a8a;
+  --ok: #8fd19e;
+  --warn: #e3b763;
+  --info: #8ab4f8;
+  --teal: #7fd1c4;
+  --console-bg: #0e0d11;
+  --console-text: #c3bfcf;
+  --mark-1: #c4b0ff;
+  --mark-2: #7c5cf0;
+  --mark-3: #a88bfa;
+  --grid: #1b1a20;
+  --k-folder: #e3b763;
+  --k-image: #ef9a9a;
+  --k-video: #8ab4f8;
+  --k-audio: #8fd19e;
+  --k-archive: #e0a37a;
+  --k-doc: #a9a5b8;
+  --k-code: #7fd1c4;
+  --k-sheet: #a6d49a;
+  --cat-0: #5b4a96;
+  --cat-1: #8a4f5a;
+  --cat-2: #3f5f8f;
+  --cat-3: #85703f;
+  --cat-4: #3f7a70;
+  --cat-5: #4f7a45;
+  --cat-6: #3a3745;
+  --cat-7: #2a2831;
   color-scheme: dark;
 }
 
@@ -171,7 +203,13 @@ body,
 html {
   font-size: calc(13px * var(--ui-scale));
 }
-/* Mono fonts (PLAN2 P2-10.1): one font for the whole UI, picked in Settings, Appearance. */
+/* Fonts, as on the site: Inter for text, Archivo for headlines, JetBrains Mono for paths, sizes and labels.
+   Settings, Appearance can set one mono font for the whole UI (PLAN2 P2-10.1). The system choice uses
+   the system font for text and headlines. */
+html[data-font="system"] {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --font-disp: var(--font-sans);
+}
 html[data-font="commit"] {
   --font-sans: "Commit Mono", ui-monospace, monospace;
   --font-mono: "Commit Mono", ui-monospace, monospace;
@@ -188,11 +226,12 @@ html[data-font="plex"] {
   --font-sans: "IBM Plex Mono", ui-monospace, monospace;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
-html:not([data-font="system"]) {
+html[data-font="commit"],
+html[data-font="geist"],
+html[data-font="jetbrains"],
+html[data-font="plex"] {
+  --font-disp: var(--font-sans);
   font-size: calc(12.5px * var(--ui-scale));
-}
-html:not([data-font="system"]) .serif {
-  letter-spacing: -0.01em;
 }
 body {
   background: var(--bg);
@@ -201,6 +240,7 @@ body {
   font-size: 1rem;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
@@ -210,11 +250,11 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
-/* Headlines and big numbers: the system font, regular weight, set a little tight. */
+/* Headlines and big numbers: Archivo, heavy and set tight, as on the site. */
 .serif {
-  font-family: var(--font-sans);
-  font-weight: 400;
-  letter-spacing: -0.022em;
+  font-family: var(--font-disp);
+  font-weight: 700;
+  letter-spacing: -0.03em;
   font-style: normal;
 }
 .serif.italic,
@@ -222,11 +262,13 @@ body {
 .italic {
   font-style: normal;
 }
-/* Labels and section names: mono small caps with letter spacing. */
-/* Small section names: plain, quiet text. */
+/* Labels and section names: small mono capitals with letter spacing, as on the site. */
 .label {
-  font-size: 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
   font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 
@@ -288,9 +330,9 @@ select option {
   padding: 6px 2px;
 }
 textarea.field {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2);
   padding: 10px 12px;
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 /* Text links: an underline that wipes in. */
@@ -321,30 +363,22 @@ textarea.field {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* The one call to action: purple, square, small capitals. On hover it turns to the text color, as on the site. */
 .btn-primary {
   position: relative;
-  overflow: hidden;
   background: var(--accent);
   color: var(--on-accent);
-  padding: 6px 18px;
-  font-weight: 500;
-  border-radius: 2px;
-  letter-spacing: 0.01em;
-  transition: transform 140ms ease-out, filter 140ms ease-out;
+  padding: 7px 18px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 0;
+  transition: background-color 150ms ease-out, color 150ms ease-out, transform 140ms ease-out;
 }
-.btn-primary::after {
-  content: '';
-  position: absolute;
-  inset: 0;
+.btn-primary:hover:not(:disabled) {
   background: var(--text);
-  opacity: 0;
-  transform: translateY(100%);
-  transition: transform 260ms cubic-bezier(0.3, 0.8, 0.2, 1), opacity 260ms;
-  mix-blend-mode: soft-light;
-}
-.btn-primary:hover::after {
-  opacity: 0.3;
-  transform: translateY(0);
+  color: var(--bg);
 }
 .btn-primary:active {
   transform: translateY(1px);
@@ -369,9 +403,9 @@ textarea.field {
   font-size: 0.74rem;
   line-height: 1;
   color: var(--muted);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2);
   border-bottom-width: 2px;
-  border-radius: 2px;
+  border-radius: 0;
 }
 
 /* A small icon button: no box until you point at it. */
@@ -381,7 +415,7 @@ textarea.field {
   width: 1.9rem;
   height: 1.9rem;
   color: var(--muted);
-  border-radius: 3px;
+  border-radius: 0;
   transition: background-color 120ms ease-out, color 120ms ease-out, transform 160ms ease-out;
 }
 .icon-btn:hover:not(:disabled) {
@@ -400,9 +434,10 @@ textarea.field {
 
 /* Floating layers: menus, the command bar, dialogs. A sheet of paper with a hairline. */
 .float-panel {
-  background: var(--bg);
-  border-radius: 4px;
-  box-shadow: var(--shadow-float);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  box-shadow: 0 40px 100px -40px rgb(0 0 0 / 0.7);
 }
 
 /* Motion: purposeful, never decorative for its own sake. */
@@ -612,7 +647,8 @@ textarea.field {
 }
 
 ::selection {
-  background: var(--accent-soft);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -635,7 +671,7 @@ input[type='radio'] {
   place-content: center;
   margin: 0;
   padding: 0;
-  border-radius: 2px;
+  border-radius: 0;
   transition: background-color 160ms, border-color 160ms, transform 160ms;
 }
 input[type='radio'] {
@@ -679,7 +715,7 @@ input[type='radio']:disabled {
 .panel {
   position: relative;
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-2);
 }
 /* Crop marks: two small accent corners, as on a print proof. */
 .panel.ticks::before,

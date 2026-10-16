@@ -5,8 +5,8 @@ import { ApiError, get, post, send, stream } from './lib/api'
 import { basename, dirname } from './lib/format'
 import type { AskSection, CompressJob, CompressSummary, Conflict, ConflictChoice, ConsentRequest, CopyJob, Entry, IndexProgress, Journal, Listing, Places, PrivacyStatus, RouterResult, SearchResponse } from './lib/types'
 
-export type Font = 'commit' | 'geist' | 'jetbrains' | 'plex' | 'system'
-export const FONTS: [Font, string][] = [['commit', 'Commit Mono'], ['geist', 'Geist Mono'], ['jetbrains', 'JetBrains Mono'], ['plex', 'IBM Plex Mono'], ['system', 'System']]
+export type Font = 'inter' | 'commit' | 'geist' | 'jetbrains' | 'plex' | 'system'
+export const FONTS: [Font, string][] = [['inter', 'Inter'], ['commit', 'Commit Mono'], ['geist', 'Geist Mono'], ['jetbrains', 'JetBrains Mono'], ['plex', 'IBM Plex Mono'], ['system', 'System']]
 export type Screen = 'files' | 'space' | 'organize' | 'privacy' | 'settings' | 'results' | 'answer' | 'ask'
 export type SortKey = 'name' | 'size' | 'mtime' | 'kind'
 export type Status = { text: string; kind: 'info' | 'error' | 'busy'; undo?: boolean; action?: { label: string; run: () => void } }
@@ -182,7 +182,7 @@ export const useApp = create<State>(() => ({
   dragPaths: [],
   theme: ls.get('theme', 'system'),
   scale: ls.get('scale', 1),
-  font: ls.get('font', 'commit'),
+  font: ls.get('font', 'inter'),
   policies: [],
   fullView: ls.get('fullView', false),
   editPath: false,

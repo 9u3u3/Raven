@@ -245,7 +245,8 @@ export default function OrganizeScreen() {
     )
 
   const TRY = (useApp.getState().places?.folders ?? []).filter((f) => ['Downloads', 'Desktop', 'Documents', 'Pictures'].includes(f.label)).map((f) => f.path)
-  const tryPaths = [...new Set([cwd, ...TRY])].filter(Boolean).slice(0, 4)
+  // One entry for each folder name: the open folder and ~/Downloads both show as "Downloads".
+  const tryPaths = [...new Set([cwd, ...TRY])].filter((p, i, all) => p && all.findIndex((q) => base(q) === base(p)) === i).slice(0, 4)
   const rootName = base(plan?.root ?? root) || plan?.root || root
   const topGroups = after.filter(([f]) => f !== '')
   const rootItems = after.find(([f]) => f === '')?.[1] ?? []
@@ -475,7 +476,7 @@ export default function OrganizeScreen() {
             )}
             <span className="block truncate text-[12px] text-muted">{it.reason}</span>
           </span>
-          {it.category && <span className="serif shrink-0 pr-2 text-[15px]  leading-none text-accent">{it.category}</span>}
+          {it.category && <span className="label shrink-0 pr-2 leading-none !text-accent">{it.category}</span>}
         </span>
       </div>
     )

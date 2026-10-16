@@ -306,7 +306,7 @@ export default function CommandBar() {
               }
             }}
             className="w-full border-0 py-1 text-[16px] placeholder:text-muted/70"
-            style={{ fontFamily: 'var(--font-serif)', letterSpacing: '-0.01em' }}
+            style={{ fontFamily: 'var(--font-disp)', letterSpacing: '-0.01em' }}
           />
           <div className="relative mt-1 h-px overflow-hidden bg-line">
             {(find.pending || folders.pending) && mode !== 'act' && <span className="absolute inset-y-0 w-1/3 bg-accent" style={{ animation: 'rv-scan 1s ease-in-out infinite' }} />}
@@ -353,7 +353,7 @@ export default function CommandBar() {
             </div>
           )}
           {q.trim() && mode === 'find' && !hits.length && !folderHits.length && !find.pending && !folders.pending && !noRoots && (
-            <div className="serif px-7 py-5 text-[14px]  text-muted">{pathMode ? `No folder matches “${q.trim()}”.` : `Nothing matches “${q.trim()}”.`}</div>
+            <div className="px-7 py-5 text-muted">{pathMode ? `No folder matches “${q.trim()}”.` : `Nothing matches “${q.trim()}”.`}</div>
           )}
           {sections.map((sec) => (
             <div key={sec.title} className="pb-1">
@@ -387,7 +387,7 @@ export default function CommandBar() {
                     className={`anim-row group relative flex cursor-default items-center gap-3 px-7 py-2 transition-colors duration-100 ${isActive ? 'bg-select' : 'hover:bg-hover'} ${row.kind === 'cmd' && row.cmd.disabled ? 'text-muted' : ''}`}
                   >
                     <span aria-hidden className={`absolute left-0 top-1.5 h-[calc(100%-12px)] w-[2px] origin-center bg-accent transition-transform duration-300 ${isActive ? 'scale-y-100' : 'scale-y-0'}`} />
-                    <span className="serif w-5 shrink-0 text-[17px]  text-muted">{isAsk ? '?' : '›'}</span>
+                    <span className="w-5 shrink-0 text-[15px] text-muted">{isAsk ? '?' : '›'}</span>
                     <span className="min-w-0 flex-1 truncate">{row.kind === 'cmd' ? row.cmd.label : `Ask “${row.q}” about your files`}</span>
                     {row.kind === 'cmd' ? <span className="mono text-[11px] text-muted">{row.cmd.hint}</span> : <kbd className="kbd">{mode === 'ask' ? 'Enter' : 'Tab'}</kbd>}
                   </div>
