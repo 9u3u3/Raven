@@ -291,12 +291,15 @@ export default function PrivacyScreen() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="px-5 pb-10 pt-5">
-        <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] items-start gap-5">
-          <div className="panel ticks px-6 py-5">
+        {/* Both panels take the height of the taller one. The mode cards grow, so the left panel has no empty band. */}
+        <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] items-stretch gap-5">
+          <div className="panel ticks flex flex-col px-6 py-5">
             <div className="label mb-3">
               <span className="sec-no">01</span>AI mode
             </div>
-            <ModePicker mode={mode} />
+            <div className="flex flex-1 flex-col [&>div]:flex-1">
+              <ModePicker mode={mode} />
+            </div>
             <Path mode={mode} />
           </div>
           <div className="panel px-6 py-5">
