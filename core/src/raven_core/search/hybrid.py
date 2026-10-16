@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import time
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 
+import numpy as np
 import sqlite_vec
 from rapidfuzz import fuzz, process, utils
 
@@ -36,11 +40,23 @@ _TOKEN = re.compile(r"[\w]+", re.UNICODE)
 
 @dataclass
 class _Names:
-    version: int = -1
-    ids: list[int] = None
-    names: list[str] = None
-    rows: dict[int, dict] = None
+    """The name list for fuzzy name search (PLAN3 P0-10). Only the ids, the processed names and one small
+    fingerprint per row stay in RAM. The other columns come from SQLite for the hits only. The old list kept
+    8 columns of every row in a dict: +666 MB on a real index of 665,325 rows."""
 
+    version: int = -1
+    ids: "np.ndarray" = None  # int64, sorted
+    names: list[str] = None  # in the order of ids
+    sig: "np.ndarray" = None  # int64: hash of (path, is_dir), in the order of ids
+    # The changes between versions, for /index/names?since= (PLAN3 P0-9): (from, to, changed ids, removed ids).
+    diffs: deque = field(default_factory=lambda: deque(maxlen=DIFF_KEEP))
+
+
+DIFF_KEEP = 32
+# More names than this: the names are scored in chunks on several threads (rapidfuzz releases the GIL).
+PARALLEL_FROM = 20_000
+_WORKERS = max(1, min(8, (os.cpu_count() or 2) // 2))
+_pool: ThreadPoolExecutor | None = None
 
 _names = _Names()
 _names_lock = threading.Lock()
@@ -50,22 +66,84 @@ def _load_names() -> _Names:
     with _names_lock:
         if _names.version == indexer.names_version and _names.ids is not None:
             return _names
-        rows = db.conn().execute(
-            "SELECT id, path, parent, name, ext, size, mtime, is_dir FROM files"
-        ).fetchall()
-        _names.ids = [r["id"] for r in rows]
-        _names.names = [utils.default_process(r["name"]) for r in rows]
-        _names.rows = {r["id"]: dict(r) for r in rows}
-        _names.version = indexer.names_version
+        version = indexer.names_version
+        ids, names, sig = [], [], []
+        for fid, path, name, is_dir in db.conn().execute("SELECT id, path, name, is_dir FROM files ORDER BY id"):
+            ids.append(fid)
+            names.append(utils.default_process(name))
+            sig.append(hash((path, is_dir)))
+        new_ids, new_sig = np.array(ids, dtype=np.int64), np.array(sig, dtype=np.int64)
+        del ids, sig
+        if _names.ids is not None:
+            old_ids, old_sig = _names.ids, _names.sig
+            at = np.searchsorted(old_ids, new_ids)
+            ok = at < len(old_ids)
+            ok[ok] = old_ids[at[ok]] == new_ids[ok]
+            same = ok.copy()
+            same[ok] = old_sig[at[ok]] == new_sig[ok]
+            changed = new_ids[~same].tolist()
+            removed = np.setdiff1d(old_ids, new_ids, assume_unique=True).tolist()
+            _names.diffs.append((_names.version, version, changed, removed))
+        _names.ids, _names.names, _names.sig, _names.version = new_ids, names, new_sig, version
         return _names
 
 
-def name_items() -> dict:
+def _rows_by_id(ids: list[int]) -> dict[int, dict]:
+    out: dict[int, dict] = {}
+    c = db.conn()
+    for i in range(0, len(ids), 900):  # SQLite allows 999 parameters by default
+        part = ids[i:i + 900]
+        for r in c.execute(
+            f"SELECT id, path, parent, name, ext, size, mtime, is_dir FROM files WHERE id IN ({','.join('?' * len(part))})", part
+        ):
+            out[r["id"]] = dict(r)
+    return out
+
+
+def name_items(since: int | None = None) -> dict:
+    """The name list for the renderer. With `since`, only the changes after that version, when the sidecar
+    still has them. A full list of a large index is many MB, and the indexer changes it often (PLAN3 P0-9)."""
     n = _load_names()
-    return {
-        "version": n.version,
-        "items": [[r["id"], r["path"], r["is_dir"]] for r in n.rows.values()],
-    }
+    if since is not None and since != n.version:
+        chain, v = [], since
+        for d in n.diffs:
+            if d[0] == v:
+                chain.append(d)
+                v = d[1]
+        if v == n.version and chain:
+            changed = sorted({i for d in chain for i in d[2]} | {i for d in chain for i in d[3]})
+            if len(changed) <= max(1000, len(n.ids) // 2):
+                rows = _rows_by_id(changed)
+                return {
+                    "version": n.version, "full": False,
+                    "upsert": [[r["id"], r["path"], r["is_dir"]] for r in rows.values()],
+                    "remove": [i for i in changed if i not in rows],
+                }
+    if since is not None and since == n.version:
+        return {"version": n.version, "full": False, "upsert": [], "remove": []}
+    rows = db.conn().execute("SELECT id, path, is_dir FROM files").fetchall()
+    return {"version": n.version, "full": True, "items": [[r[0], r[1], r[2]] for r in rows]}
+
+
+def _fuzzy(q: str, names: list[str], limit: int) -> list[tuple[str, float, int]]:
+    global _pool
+    if len(names) < PARALLEL_FROM or _WORKERS == 1:
+        return process.extract(q, names, scorer=fuzz.WRatio, limit=limit, score_cutoff=72, processor=None)
+    # PLAN3 P1-5: one query over 665,325 names took 368 ms in one thread, and cdist(workers=-1) uses one thread
+    # for one query. Chunks on 8 threads: 70 ms, with the same scores.
+    if _pool is None:
+        _pool = ThreadPoolExecutor(_WORKERS, thread_name_prefix="names")
+    step = (len(names) + _WORKERS - 1) // _WORKERS
+
+    def score(i: int) -> np.ndarray:
+        return process.cdist([q], names[i:i + step], scorer=fuzz.WRatio, score_cutoff=72, processor=None, dtype=np.uint8)[0]
+
+    scores = np.concatenate(list(_pool.map(score, range(0, len(names), step))))
+    idx = np.flatnonzero(scores)
+    if len(idx) > limit:
+        idx = idx[np.argpartition(scores[idx], -limit)[-limit:]]
+    idx = idx[np.argsort(-scores[idx], kind="stable")]
+    return [(names[i], float(scores[i]), int(i)) for i in idx]
 
 
 def _name_hits(f: Filters, limit: int = TOP) -> list[int]:
@@ -73,7 +151,8 @@ def _name_hits(f: Filters, limit: int = TOP) -> list[int]:
     if not q:
         return []
     n = _load_names()
-    hits = process.extract(q, n.names, scorer=fuzz.WRatio, limit=limit * 3, score_cutoff=72, processor=None)
+    hits = _fuzzy(q, n.names, limit * 3)
+    rows = _rows_by_id([int(n.ids[idx]) for _, _, idx in hits]) if f.active else {}
     # WRatio matches parts of letters too: "a bar chart" gives a.txt 85 points. A name counts only when one real
     # word of the query (2 letters or more) is close to one word of the name. A typo ("dmbs") stays close.
     words = [w for w in q.split() if len(w) >= 2]
@@ -83,8 +162,8 @@ def _name_hits(f: Filters, limit: int = TOP) -> list[int]:
             toks = [t for t in name.split() if len(t) >= 2]
             if not any(t.startswith(w) or w.startswith(t) or fuzz.ratio(w, t) >= 75 for w in words for t in toks):
                 continue
-        fid = n.ids[idx]
-        if f.active and not f.match(n.rows[fid]):
+        fid = int(n.ids[idx])
+        if f.active and (fid not in rows or not f.match(rows[fid])):
             continue
         out.append(fid)
         if len(out) >= limit:

@@ -3,20 +3,31 @@ import { Fzf } from 'fzf'
 
 type Item = { id: number; path: string; name: string; dir: boolean }
 
-let items: Item[] = []
+const byId = new Map<number, Item>()
 let fzf: Fzf<Item[]> | null = null
+
+function toItem([id, path, dir]: [number, string, number]): Item {
+  return { id, path, name: path.slice(path.lastIndexOf('/') + 1), dir: !!dir }
+}
+
+function rebuild(): void {
+  fzf = new Fzf([...byId.values()], { selector: (i) => i.name, limit: 40, casing: 'case-insensitive' })
+  ;(self as unknown as Worker).postMessage({ type: 'loaded', count: byId.size })
+}
 
 self.onmessage = (e: MessageEvent) => {
   const msg = e.data
   if (msg.type === 'load') {
-    items = (msg.items as [number, string, number][]).map(([id, path, dir]) => ({
-      id,
-      path,
-      name: path.slice(path.lastIndexOf('/') + 1),
-      dir: !!dir
-    }))
-    fzf = new Fzf(items, { selector: (i) => i.name, limit: 40, casing: 'case-insensitive' })
-    ;(self as unknown as Worker).postMessage({ type: 'loaded', count: items.length })
+    byId.clear()
+    for (const row of msg.items as [number, string, number][]) byId.set(row[0], toItem(row))
+    rebuild()
+    return
+  }
+  // The changes since the last list (PLAN3 P0-9): the sidecar no longer sends the whole list after each change.
+  if (msg.type === 'patch') {
+    for (const id of msg.remove as number[]) byId.delete(id)
+    for (const row of msg.upsert as [number, string, number][]) byId.set(row[0], toItem(row))
+    rebuild()
     return
   }
   if (msg.type === 'query') {

@@ -18,12 +18,20 @@ worker.onmessage = (e: MessageEvent) => {
 
 let loadTimer: ReturnType<typeof setTimeout> | null = null
 
+type Row = [number, string, number]
+type Names = { version: number; full: true; items: Row[] } | { version: number; full: false; upsert: Row[]; remove: number[] }
+
+// The version of the list in the worker. After the first full list, Raven asks only for the changes (PLAN3 P0-9).
+let version: number | null = null
+
 export async function loadNames(): Promise<void> {
   try {
-    const r = await get<{ version: number; items: [number, string, number][] }>('/index/names')
-    worker.postMessage({ type: 'load', items: r.items })
+    const r = await get<Names>('/index/names', version === null ? undefined : { since: version })
+    if (r.full) worker.postMessage({ type: 'load', items: r.items })
+    else if (r.upsert.length || r.remove.length) worker.postMessage({ type: 'patch', upsert: r.upsert, remove: r.remove })
+    version = r.version
   } catch {
-    /* sidecar not ready: the next names_changed event retries */
+    version = null // the sidecar restarted or is not ready: the next try loads the full list
   }
 }
 

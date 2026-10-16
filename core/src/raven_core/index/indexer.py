@@ -274,7 +274,9 @@ class Indexer:
         self.interactive = threading.Event()
         self.rescan = threading.Event()
         self.priority_dir: str | None = None
-        self.names_version = 0
+        # Unique for each start: the renderer asks for the changes since its version (PLAN3 P0-9), and a
+        # restarted sidecar must not match an old version by chance.
+        self.names_version = int(time.time() * 1000)
         self.state = {"stage": "idle", "scanned": 0, "embed_ready": False, "embed_error": None}
         self._last_progress: dict | None = None
         self._watch_stop = threading.Event()

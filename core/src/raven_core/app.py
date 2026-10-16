@@ -1393,8 +1393,8 @@ def classify_stats():
 
 
 @app.get("/index/names")
-def index_names():
-    return hybrid.name_items()
+def index_names(since: int | None = None):
+    return hybrid.name_items(since)
 
 
 @app.get("/index/size")
