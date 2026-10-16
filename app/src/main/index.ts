@@ -18,7 +18,15 @@ let sidecar: ChildProcess | null = null
 let ollama: ChildProcess | null = null
 let quitting = false
 let restarts = 0
-const cfg = { port: 0, token: randomBytes(24).toString('hex'), state: 'starting' as SidecarState, version: '' }
+// mediaToken: for URLs in <img>, <video> and the PDF frame. It opens the media routes only, so a URL that
+// leaks (a log, a copied link) cannot change files (PLAN3 P0-4). The main token stays in headers.
+const cfg = {
+  port: 0,
+  token: randomBytes(24).toString('hex'),
+  mediaToken: randomBytes(24).toString('hex'),
+  state: 'starting' as SidecarState,
+  version: ''
+}
 
 function coreDir(): string {
   if (process.env.RAVEN_CORE_DIR) return resolve(process.env.RAVEN_CORE_DIR)
@@ -98,7 +106,8 @@ async function startSidecar(): Promise<void> {
       PYTHONUNBUFFERED: '1',
       MALLOC_ARENA_MAX: process.env.MALLOC_ARENA_MAX ?? '2',
       RAVEN_PARENT_PID: String(process.pid),
-      RAVEN_TOKEN: cfg.token
+      RAVEN_TOKEN: cfg.token,
+      RAVEN_MEDIA_TOKEN: cfg.mediaToken
     },
     stdio: ['ignore', 'inherit', 'inherit']
   })

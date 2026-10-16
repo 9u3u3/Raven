@@ -25,7 +25,9 @@ class CloudError(Exception):
 
 
 def groq_key() -> str | None:
-    return os.environ.get("GROQ_API_KEY") or db.get_setting("groq_api_key") or None
+    from .. import keys
+
+    return os.environ.get("GROQ_API_KEY") or keys.get("groq_api_key")
 
 
 def claude_ok() -> bool:
@@ -274,7 +276,9 @@ ANTHROPIC_DEFAULT = "claude-sonnet-5-5"
 
 
 def anthropic_key() -> str | None:
-    return os.environ.get("ANTHROPIC_API_KEY") or db.get_setting("anthropic_api_key") or None
+    from .. import keys
+
+    return os.environ.get("ANTHROPIC_API_KEY") or keys.get("anthropic_api_key")
 
 
 def _anthropic_headers(key: str) -> dict:

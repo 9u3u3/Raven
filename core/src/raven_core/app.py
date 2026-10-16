@@ -37,6 +37,13 @@ from .media import routes as media_routes
 log = logging.getLogger("raven")
 # Pop, not get: the tools that the sidecar starts (claude, 7z, soffice) do not inherit the token (PLAN3 P0-1).
 TOKEN = os.environ.pop("RAVEN_TOKEN", "")
+# The media token opens only GET on MEDIA_ROUTES: the URLs in <img>, <video> and the PDF frame carry it, not
+# the main token (PLAN3 P0-4).
+MEDIA_TOKEN = os.environ.pop("RAVEN_MEDIA_TOKEN", "")
+MEDIA_ROUTES = ("/fs/raw", "/fs/thumb", "/visual/thumb")
+# A file from /fs/raw with one of these types would open as a page on the sidecar origin, and a script in it
+# could call the API. Raven sends these files as plain text.
+ACTIVE_TYPES = {"html", "htm", "xhtml", "shtml", "xml", "xsl", "xslt", "js", "mjs", "cjs", "svgz", "hta", "mht", "mhtml"}
 
 
 _started = {"done": False}
@@ -84,6 +91,9 @@ def _start_services(background: bool = True) -> None:
 
     learn.init()
     rules.init()
+    from . import keys
+
+    keys.migrate()
     from .compress import auto  # noqa: F401  (import now, not in a busy process later)
 
     if background:
@@ -158,6 +168,19 @@ def _authorized(request_token: str | None) -> bool:
     return bool(TOKEN) and request_token is not None and hmac.compare_digest(request_token, TOKEN)
 
 
+def _media_ok(request: Request, request_token: str | None) -> bool:
+    return (bool(MEDIA_TOKEN) and request_token is not None and request.method == "GET"
+            and request.url.path in MEDIA_ROUTES and hmac.compare_digest(request_token, MEDIA_TOKEN))
+
+
+def _media_headers(response) -> None:
+    """No type guessing, and no scripts if a file opens as a page. The PDF viewer does not run in a sandboxed
+    document, so a PDF gets nosniff only."""
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    if not response.headers.get("content-type", "").startswith("application/pdf"):
+        response.headers["Content-Security-Policy"] = "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'"
+
+
 @app.middleware("http")
 async def auth(request: Request, call_next):
     if request.method == "OPTIONS":
@@ -166,13 +189,16 @@ async def auth(request: Request, call_next):
     h = request.headers.get("authorization", "")
     if h.startswith("Bearer "):
         tok = h[7:]
-    if not _authorized(tok):
+    if not _authorized(tok) and not _media_ok(request, tok):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     from . import secure
 
     if secure.locked() and not request.url.path.startswith(("/health", "/security")):
         return JSONResponse({"error": "The index is locked. Type the passphrase to open it.", "locked": True}, status_code=423)
-    return await call_next(request)
+    response = await call_next(request)
+    if request.url.path in MEDIA_ROUTES:
+        _media_headers(response)
+    return response
 
 
 @app.exception_handler(ops.OpError)
@@ -472,6 +498,8 @@ def fs_raw(path: str):
     path = _real(path)
     if not os.path.isfile(path):
         raise FileNotFoundError(path)
+    if ext_of(path) in ACTIVE_TYPES:
+        return FileResponse(path, media_type="text/plain; charset=utf-8")
     return FileResponse(path)
 
 
@@ -1444,10 +1472,16 @@ def get_settings():
     rows = db.conn().execute("SELECT key, value FROM settings").fetchall()
     import json
 
+    from . import keys
+
     out = {r[0]: json.loads(r[1]) for r in rows if r[0] not in ("ui_tabs", "galaxy")}
-    # The renderer never gets a stored API key back, only a hint that one is set.
-    for k in [k for k in out if k.endswith("_api_key")]:
-        out[k] = ("…" + str(out[k])[-4:]) if out[k] else ""
+    # The renderer never gets a stored API key back, only a hint that one is set. The keys can live in the
+    # system keyring, not in this table (keys.py).
+    for k in keys.NAMES:
+        v = keys.get(k)
+        if v or k in out:
+            out[k] = ("…" + v[-4:]) if v else ""
+    out["key_store"] = keys.store()
     return out
 
 
@@ -1509,6 +1543,10 @@ def set_setting(b: SettingBody):
         raise HTTPException(400, "binary_vectors must be auto, on or off")
     if b.key not in allowed:
         raise HTTPException(400, f"Unknown setting: {b.key}")
+    if b.key.endswith("_api_key"):
+        from . import keys
+
+        return {"ok": True, "store": keys.put(b.key, b.value)}
     db.set_setting(b.key, b.value)
     if b.key == "binary_vectors":
         from .search import vectors

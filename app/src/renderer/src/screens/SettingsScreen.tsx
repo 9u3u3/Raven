@@ -466,6 +466,12 @@ export default function SettingsScreen() {
                 ))}
               </select>
               <KeyField provider="anthropic" setting="anthropic_api_key" label="Anthropic API key" placeholder="sk-ant-… (console.anthropic.com)" stored={settings.anthropic_api_key as string} onSaved={() => void reload()} />
+              <span className="text-muted">Where keys are stored</span>
+              <span className="text-[12px] text-muted">
+                {settings.key_store === 'keyring'
+                  ? 'In the system keyring, not in the index.'
+                  : 'In the index on this computer (only your user can read it). Start a system keyring (GNOME Keyring, KWallet) to keep them out of the index.'}
+              </span>
               <span className="text-muted">Anthropic model</span>
               <select value={(settings.anthropic_model as string) || 'claude-sonnet-5-5'} onChange={(e) => void setSetting('anthropic_model', e.target.value)} className="field mono w-full max-w-[420px]">
                 {['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5'].map((m) => (

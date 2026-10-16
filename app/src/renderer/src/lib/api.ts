@@ -20,6 +20,8 @@ export class ApiError extends Error {
 
 let base = ''
 let token = ''
+// The media-only token for URLs (PLAN3 P0-4). A plain browser has none, and uses the main token.
+let mediaToken = ''
 
 type Handler = (data: any) => void
 const handlers = new Map<string, Set<Handler>>()
@@ -56,6 +58,7 @@ function apply(c: SidecarConfig): void {
     const changed = base !== `http://127.0.0.1:${c.port}`
     base = `http://127.0.0.1:${c.port}`
     token = c.token
+    mediaToken = c.mediaToken || c.token
     if (c.state === 'ok' && (changed || !ws)) connectWs()
   }
 }
@@ -118,16 +121,16 @@ export async function del<T = any>(path: string): Promise<T> {
 }
 
 export function rawUrl(path: string): string {
-  return `${base}/fs/raw${qs({ path, token })}`
+  return `${base}/fs/raw${qs({ path, token: mediaToken })}`
 }
 
 export function thumbUrl(path: string, size = 256, mtime = 0): string {
-  return `${base}/fs/thumb${qs({ path, size, token, v: mtime })}`
+  return `${base}/fs/thumb${qs({ path, size, token: mediaToken, v: mtime })}`
 }
 
 /** A stored keyframe or PDF page image (media/visual.py). */
 export function visualThumbUrl(p: string): string {
-  return `${base}/visual/thumb${qs({ p, token })}`
+  return `${base}/visual/thumb${qs({ p, token: mediaToken })}`
 }
 
 let ws: WebSocket | null = null
