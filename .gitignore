@@ -22,15 +22,9 @@ testdata/.video_cache/
 !.env.example
 *.log
 
-# local-only docs (plans, pitch, notes)
-/PLAN.md
-/PLAN2.md
-/pitch.md
-/technical_details.md
-/guide.md
+# local-only files: plans, hackathon material, notes for the AI assistant, the demo kit
+/notes/
 /CLAUDE.md
-/testdata/DEMO_HOME.md
-/docs/raven-ps3.pptx
 /testdata/make_demo_home.py
 /testdata/run_demo.sh
 /docs/pipelines/10-demo-kit.*
