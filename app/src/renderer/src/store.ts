@@ -1032,12 +1032,14 @@ export async function nameFiles(path?: string): Promise<void> {
 
 // ---------------------------------------------------------------- granular control (PLAN2 P2-5)
 
-export type Policy = { path: string; no_index: number; no_cloud: number; protect: number; no_compress: number }
+export type Policy = { path: string; no_index: number; no_cloud: number; protect: number; no_compress: number; full_index: number }
 export const POLICY_NAMES: [keyof Omit<Policy, 'path'>, string][] = [
   ['no_index', 'Not indexed'],
   ['no_cloud', 'Never to the cloud'],
   ['protect', 'Raven never changes it'],
-  ['no_compress', 'Never compressed']
+  ['no_compress', 'Never compressed'],
+  // PLAN3 P0-7: a code project is one row in the index. This rule lists every file name of the projects inside.
+  ['full_index', 'List every file of code projects']
 ]
 
 export async function loadPolicies(): Promise<void> {

@@ -1071,6 +1071,7 @@ class PolicyBody(BaseModel):
     no_cloud: bool | None = None
     protect: bool | None = None
     no_compress: bool | None = None
+    full_index: bool | None = None
 
 
 @app.post("/fs/policies")
@@ -1079,7 +1080,7 @@ def fs_policy(b: PolicyBody):
 
     flags = {k: v for k, v in b.model_dump().items() if k != "path" and v is not None}
     out = props.set_policy(b.path, **flags)
-    if "no_index" in flags:
+    if "no_index" in flags or "full_index" in flags:
         indexer.roots_changed()  # a rescan drops (or adds) the folder's files
     return out
 

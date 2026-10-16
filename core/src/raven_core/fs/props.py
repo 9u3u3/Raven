@@ -480,13 +480,19 @@ def is_system(path: str) -> bool:
 
 # ---------------------------------------------------------------- folder rules (policies)
 
-POLICIES = ("no_index", "no_cloud", "protect", "no_compress")
+# full_index (PLAN3 P0-7): the indexer reads every file of the code projects in this folder. Without it, a code
+# project is one row in the index.
+POLICIES = ("no_index", "no_cloud", "protect", "no_compress", "full_index")
 
 
 def _policy_table() -> None:
     db.conn().execute(
         "CREATE TABLE IF NOT EXISTS folder_policy (path TEXT PRIMARY KEY, no_index INTEGER DEFAULT 0, "
         "no_cloud INTEGER DEFAULT 0, protect INTEGER DEFAULT 0, no_compress INTEGER DEFAULT 0)")
+    cols = {r[1] for r in db.conn().execute("PRAGMA table_info(folder_policy)")}
+    for name in POLICIES:
+        if name not in cols:
+            db.conn().execute(f"ALTER TABLE folder_policy ADD COLUMN {name} INTEGER DEFAULT 0")
 
 
 _policy_cache: dict = {"ts": 0.0, "rows": []}
@@ -510,7 +516,7 @@ def set_policy(path: str, **flags) -> dict:
     cur.update({k: int(bool(v)) for k, v in flags.items()})
     with db.tx() as c:
         if any(cur.values()):
-            c.execute(f"INSERT OR REPLACE INTO folder_policy (path, {', '.join(POLICIES)}) VALUES (?, ?, ?, ?, ?)",
+            c.execute(f"INSERT OR REPLACE INTO folder_policy (path, {', '.join(POLICIES)}) VALUES (?{', ?' * len(POLICIES)})",
                       (path, *[cur[k] for k in POLICIES]))
         else:
             c.execute("DELETE FROM folder_policy WHERE path=?", (path,))

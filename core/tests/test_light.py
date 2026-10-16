@@ -43,13 +43,48 @@ def test_projects_and_sdks_are_names_only(tmp_path):
     ix.indexer.scan_root(str(home))
     r = _rows(home)
     assert r["Documents/notes.md"] == (1, 0)          # read in the text stage
-    assert r["Codes/app/src/index.js"] == (2, 1)      # in a project: name only
-    # An SDK stays as one names-only folder. Raven does not list what is inside it.
+    # A code project is one names-only folder row (PLAN3 P0-7). Raven does not list its files.
+    assert "Codes/app/src/index.js" not in r and "Codes/app/package.json" not in r
+    app = db.conn().execute("SELECT is_dir, light FROM files WHERE path=?", (str(home / "Codes" / "app"),)).fetchone()
+    assert tuple(app) == (1, 1)
+    # An SDK stays as one names-only folder too.
     assert "Android/Sdk/platforms/android.jar" not in r
     sdk = db.conn().execute("SELECT is_dir, light FROM files WHERE path=?", (str(home / "Android"),)).fetchone()
     assert tuple(sdk) == (1, 1)
-    # The name is still in the index for Find.
-    assert db.conn().execute("SELECT COUNT(*) FROM files WHERE name='index.js'").fetchone()[0] == 1
+
+
+def test_full_index_rule_lists_project_files_by_name(tmp_path):
+    from raven_core.fs import props
+
+    home = _tree(tmp_path)
+    db.set_setting("index_code", False)
+    protect.forget()
+    props.set_policy(str(home / "Codes"), full_index=True)
+    try:
+        ix.indexer.scan_root(str(home))
+        r = _rows(home)
+        assert r["Codes/app/src/index.js"] == (2, 1)  # listed, name only
+        # The rule opens code projects only: the SDK stays one row.
+        assert "Android/Sdk/platforms/android.jar" not in r
+    finally:
+        props.set_policy(str(home / "Codes"), full_index=False)
+    # Without the rule, the next scan drops the project files again.
+    ix.indexer.scan_root(str(home))
+    assert "Codes/app/src/index.js" not in _rows(home)
+
+
+def test_a_big_delete_marks_the_index_for_compaction(tmp_path, monkeypatch):
+    home = _tree(tmp_path)
+    db.set_setting("index_compact_due", False)
+    db.set_setting("index_code", True)
+    try:
+        ix.indexer.scan_root(str(home))  # lists the project files
+    finally:
+        db.set_setting("index_code", False)
+    monkeypatch.setattr(ix, "BIG_DELETE", 2)
+    ix.indexer.scan_root(str(home))  # drops them again: more than BIG_DELETE rows
+    assert db.get_setting("index_compact_due") is True
+    db.set_setting("index_compact_due", False)
 
 
 def test_a_project_root_is_read(tmp_path):

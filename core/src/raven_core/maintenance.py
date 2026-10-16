@@ -3,6 +3,7 @@
 - An index from an older version has no auto-vacuum. When more than COMPACT_SHARE of it is free pages, one
   full compact() rebuilds it and switches it to incremental auto-vacuum. At most once a day.
 - An incremental index gives up to 100 MB of free pages back on each run (db.trim()).
+- After a scan that removes many rows, the indexer sets index_compact_due, and the next idle run compacts.
 """
 
 from __future__ import annotations
@@ -28,6 +29,9 @@ def disk_room_for_compact(info: dict) -> bool:
 
 
 def run_once(force: bool = False) -> dict:
+    if db.get_setting("index_compact_due", False):
+        force = True
+        db.set_setting("index_compact_due", False)
     info = db.size_info()
     if info["auto_vacuum"] != "incremental":
         last = db.get_setting("index_compacted_at", 0) or 0

@@ -34,6 +34,7 @@ BATCH_B = 16
 TEXT_VERSION = 3
 PII_VERSION = 2
 BATCH_C = 48
+BIG_DELETE = 20_000
 # One embedding call holds at most this many characters (about 2,000 tokens).
 EMBED_CHARS = 8000
 
@@ -86,6 +87,14 @@ DATASET_NAMES = {"scikit_learn_data", "nltk_data", "tensorflow_datasets", "torch
                  "huggingface", "hf_datasets", "datasets_cache"}
 
 
+def _full(path: str) -> bool:
+    """A full_index folder rule on this folder or a folder above it: list every file of its code projects, by
+    name only (PLAN3 P0-7). The "index code" setting also reads their text."""
+    from ..fs.props import policy_for
+
+    return policy_for(path, "full_index")
+
+
 def _names_only_dir(path: str) -> bool:
     """A code project or a software folder (SDK, toolchain, app data): its files keep only their names in the
     index, unless the user asks to read code too. Text, meaning, images and speech of 600,000 source and SDK
@@ -98,9 +107,10 @@ def _names_only_dir(path: str) -> bool:
 
 
 def _skip_dir(path: str) -> bool:
-    """An SDK, a toolchain, an app's data or a downloaded dataset: Raven keeps the folder by name and does not
-    go inside. Hundreds of thousands of its files would cost minutes at each scan and help no search.
-    A code project is different: its file names stay (names only)."""
+    """An SDK, a toolchain, an app's data, a downloaded dataset or a code project: Raven keeps the folder as one
+    row and does not go inside. One row per file of a project filled 93% of a real index (620,643 of 665,325
+    rows) and all of the name list in RAM (PLAN3 P0-7). Folder search and the project alias work from the
+    folder row. A full_index folder rule lists the file names again, and the "index code" setting reads them."""
     from ..fs.props import policy_for
 
     if policy_for(path, "no_index"):
@@ -109,7 +119,9 @@ def _skip_dir(path: str) -> bool:
         return False
     from ..storage import protect
 
-    return os.path.basename(path) in DATASET_NAMES or protect.is_tool_dir(path)
+    if os.path.basename(path) in DATASET_NAMES or protect.is_tool_dir(path):
+        return True  # full_index does not open these: a rule on ~/Codes must not read an SDK
+    return protect.is_project_root(path) and not _full(path)
 
 
 def _inside_skipped(path: str, root: str) -> bool:
@@ -403,6 +415,10 @@ class Indexer:
         gone = [i for i, p in known if p not in seen]
         if self.stop.is_set():
             return  # a stopped scan did not see everything: nothing is gone
+        if len(gone) >= BIG_DELETE:
+            # Many rows went at once (the first scan after PLAN3 P0-7 drops the files inside code projects).
+            # The idle upkeep then gives the space back without its one-day wait.
+            db.set_setting("index_compact_due", True)
         with db.tx() as tc:
             if gone:
                 _remove_ids(tc, gone)
