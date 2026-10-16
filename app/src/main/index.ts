@@ -1,13 +1,14 @@
 // Electron main process: starts and watches the sidecar and Ollama, guards egress,
 // and gives the renderer the OS integration it needs (section 7).
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { ChildProcess, spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdtempSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import net from 'node:net'
-import { join, resolve } from 'node:path'
+import { extname, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const OLLAMA_URL = 'http://127.0.0.1:11434'
 
@@ -188,20 +189,70 @@ function stopOllama(): void {
   }
 }
 
-// Egress guard (section 10.6): the renderer may reach the loopback address only.
+/** The app page: the Vite dev server in development, else the built index.html. */
+const DEV_URL = process.env.ELECTRON_RENDERER_URL ? new URL(process.env.ELECTRON_RENDERER_URL) : null
+const PAGE_URL = DEV_URL ? DEV_URL.href : pathToFileURL(join(__dirname, '../renderer/index.html')).href
+
+function isAppPage(url: string): boolean {
+  try {
+    const u = new URL(url)
+    if (DEV_URL) return u.origin === DEV_URL.origin
+    return u.protocol === 'file:' && u.pathname === new URL(PAGE_URL).pathname
+  } catch {
+    return false
+  }
+}
+
+// Egress guard (section 10.6, PLAN3 P1-3): the renderer may reach the sidecar port only, and in development the
+// Vite dev server. Other local services (Ollama, databases, other apps) stay out of reach of the renderer.
 function installEgressGuard(): void {
   session.defaultSession.webRequest.onBeforeRequest((details, cb) => {
     const url = details.url
-    if (/^(devtools|file|data|blob|chrome|chrome-extension):/.test(url)) return cb({})
+    if (/^(devtools|data|blob|chrome|chrome-extension):/.test(url)) return cb({})
     try {
       const u = new URL(url)
-      if (u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '[::1]') return cb({})
+      if (u.protocol === 'file:') return cb({}) // the app page and its files; previews use the sidecar
+      const loop = u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '[::1]'
+      const port = Number(u.port || (u.protocol === 'https:' || u.protocol === 'wss:' ? 443 : 80))
+      if (loop && cfg.port && port === cfg.port) return cb({})
+      if (loop && DEV_URL && port === Number(DEV_URL.port)) return cb({})
     } catch {
       /* bad URL: block */
     }
     console.warn('[raven] egress blocked:', url)
     cb({ cancel: true })
   })
+}
+
+/** PLAN3 P1-2: IPC only from the main frame of the app page. A preview frame or a page that was navigated away
+ * from the app cannot open files, start a terminal or write a PDF. */
+function fromApp(e: IpcMainEvent | IpcMainInvokeEvent): boolean {
+  const ok = !!win && e.sender === win.webContents && e.senderFrame === e.sender.mainFrame && isAppPage(e.senderFrame?.url ?? '')
+  if (!ok) console.warn('[raven] IPC refused from', e.senderFrame?.url)
+  return ok
+}
+
+// Programs and launchers: opening one runs it. Raven asks first (PLAN3 P1-2).
+const RUNNABLE = new Set(['.desktop', '.sh', '.bash', '.zsh', '.run', '.bin', '.appimage', '.exe', '.msi', '.bat', '.cmd', '.com', '.scr', '.ps1', '.vbs', '.jar', '.app', '.command'])
+
+function runnable(p: string): boolean {
+  if (RUNNABLE.has(extname(p).toLowerCase())) return true
+  // The execute bit alone says little: files on NTFS and FAT drives often have it. A program starts with an ELF
+  // header or a #! line.
+  try {
+    const st = statSync(p)
+    if (process.platform === 'win32' || !st.isFile() || (st.mode & 0o111) === 0) return false
+    const fd = openSync(p, 'r')
+    const head = Buffer.alloc(4)
+    try {
+      readSync(fd, head, 0, 4, 0)
+    } finally {
+      closeSync(fd)
+    }
+    return head.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])) || head.subarray(0, 2).toString() === '#!'
+  } catch {
+    return false
+  }
 }
 
 function createWindow(): void {
@@ -218,7 +269,7 @@ function createWindow(): void {
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0F100F' : '#FAFAF7',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true, // PLAN3 P1-1: the preload uses only contextBridge, ipcRenderer and webUtils
       contextIsolation: true,
       nodeIntegration: false,
       plugins: true // the built-in PDF viewer for previews
@@ -233,12 +284,13 @@ function createWindow(): void {
   })
   // Links that try to open a new window go to the system browser only if they are web links.
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  // PLAN3 P1-2: the window shows the app page only. A link to a file or to the sidecar does not replace it.
   win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith('http://localhost') && !url.startsWith('http://127.0.0.1') && !url.startsWith('file:')) e.preventDefault()
+    if (!isAppPage(url)) e.preventDefault()
   })
+  win.webContents.on('will-attach-webview', (e) => e.preventDefault())
 
-  if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else void win.loadFile(join(__dirname, '../renderer/index.html'))
+  void win.loadURL(PAGE_URL)
 
   // Test hook: RAVEN_SHOT=<png path> saves a screenshot after RAVEN_SHOT_DELAY ms, then quits.
   const shot = process.env.RAVEN_SHOT
@@ -278,31 +330,54 @@ function terminalCommand(dir: string): [string, string[]] | null {
 }
 
 function registerIpc(): void {
-  ipcMain.handle('raven:config', () => ({ ...cfg }))
-  ipcMain.handle('raven:open-path', async (_e, p: string) => {
+  ipcMain.handle('raven:config', (e) => (fromApp(e) ? { ...cfg } : null))
+  ipcMain.handle('raven:open-path', async (e, p: string) => {
+    if (!fromApp(e) || typeof p !== 'string') return 'Refused'
+    if (runnable(p)) {
+      const r = await dialog.showMessageBox(win!, {
+        type: 'warning',
+        buttons: ['Cancel', 'Run it'],
+        defaultId: 0,
+        cancelId: 0,
+        message: `Run the program ${p.slice(p.lastIndexOf('/') + 1)}?`,
+        detail: 'This file is a program or a launcher. Opening it runs it with your rights. Run it only if you trust where it came from.'
+      })
+      if (r.response !== 1) return null
+    }
     const err = await shell.openPath(p)
     return err || null
   })
-  ipcMain.handle('raven:show-in-folder', (_e, p: string) => shell.showItemInFolder(p))
-  ipcMain.handle('raven:open-terminal', (_e, dir: string) => {
+  ipcMain.handle('raven:show-in-folder', (e, p: string) => {
+    if (fromApp(e) && typeof p === 'string') shell.showItemInFolder(p)
+  })
+  ipcMain.handle('raven:open-terminal', (e, dir: string) => {
+    if (!fromApp(e) || typeof dir !== 'string') return 'Refused'
+    try {
+      if (!statSync(dir).isDirectory()) return 'Not a folder'
+    } catch {
+      return 'Not a folder'
+    }
     const t = terminalCommand(dir)
     if (!t) return 'No terminal app found. Set the TERMINAL variable.'
     spawn(t[0], t[1], { cwd: dir, detached: true, stdio: 'ignore' }).unref()
     return null
   })
-  ipcMain.handle('raven:pick-folder', async () => {
+  ipcMain.handle('raven:pick-folder', async (e) => {
+    if (!fromApp(e)) return []
     const r = await dialog.showOpenDialog(win!, { properties: ['openDirectory', 'multiSelections'] })
     return r.canceled ? [] : r.filePaths
   })
   ipcMain.on('raven:start-drag', (e, paths: string[]) => {
-    if (!paths.length) return
+    if (!fromApp(e) || !Array.isArray(paths) || !paths.length) return
     const icon = nativeImage.createFromDataURL(
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGklEQVR42mNkYGD4z0ABYBw1YNSAUQNGDQAAWj0BEdk4m9AAAAAASUVORK5CYII='
     )
     e.sender.startDrag({ file: paths[0], files: paths, icon })
   })
   // MD and HTML to PDF (section 9.9): Chromium prints the HTML that pandoc made. No LaTeX needed.
-  ipcMain.handle('raven:print-pdf', async (_e, html: string, out: string) => {
+  ipcMain.handle('raven:print-pdf', async (e, html: string, out: string) => {
+    if (!fromApp(e) || typeof html !== 'string' || typeof out !== 'string') return 'Refused'
+    if (extname(out).toLowerCase() !== '.pdf') return 'The output must be a .pdf file'
     if (existsSync(out)) return 'The output file exists already'
     const dir = mkdtempSync(join(tmpdir(), 'raven-print-'))
     const page = join(dir, 'page.html')
@@ -320,7 +395,8 @@ function registerIpc(): void {
       rmSync(dir, { recursive: true, force: true })
     }
   })
-  ipcMain.handle('raven:start-ollama', async () => {
+  ipcMain.handle('raven:start-ollama', async (e) => {
+    if (!fromApp(e)) return false
     ollamaStarts = 0
     await ensureOllama()
     for (let i = 0; i < 30; i++) {
@@ -329,7 +405,8 @@ function registerIpc(): void {
     }
     return false
   })
-  ipcMain.handle('raven:restart-sidecar', async () => {
+  ipcMain.handle('raven:restart-sidecar', async (e) => {
+    if (!fromApp(e)) return
     restarts = 0
     sidecar?.kill()
     if (!sidecar) await startSidecar()
