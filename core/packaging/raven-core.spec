@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_sub
 
 datas, binaries, hidden = [], [], []
 for pkg in ("sqlite_vec", "onnxruntime", "tokenizers", "faster_whisper", "ctranslate2", "magika", "markitdown",
-            "umap", "pynndescent", "numba", "llvmlite", "sklearn", "sqlcipher3", "pymupdf", "keyring",
+            "sqlcipher3", "pymupdf", "keyring",
             "model2vec", "safetensors"):  # model2vec: lite mode (PLAN2 P2-6)
     d, b, h = collect_all(pkg)
     datas += d
@@ -23,7 +23,8 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hidden,
-    excludes=["tkinter", "matplotlib", "IPython", "pytest", "torch"],
+    # PLAN3 P1-4: the map by meaning and the photo hash use NumPy only. Keep the heavy science stack out.
+    excludes=["tkinter", "matplotlib", "IPython", "pytest", "torch", "scipy", "sklearn", "numba", "llvmlite", "umap", "pynndescent"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

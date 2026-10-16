@@ -1,8 +1,11 @@
 """File Galaxy (section 13.12 item 2): a 2D map of the indexed files by meaning.
 
 1. Each file's vector is the mean of its first chunk vectors (the vectors that search already uses).
-2. UMAP (cosine) puts the vectors on a plane. Files with close meaning land close together.
-3. HDBSCAN finds the groups on the plane. Points in no group stay grey.
+2. Spherical k-means finds the groups in the vector space. A file far from every group centre stays grey.
+3. The group centres go on a plane (PCA), and each file sits near its centre, spread along the main
+   directions of its group. Files with close meaning land close together.
+   PLAN3 P1-4: NumPy only. UMAP and HDBSCAN brought llvmlite, numba, scipy and scikit-learn into the package
+   (about 330 MB of 947 MB) for this one screen.
 4. The local LLM names each group from its file names and titles, in one JSON call.
    Without the model, a group gets its most common category or folder name.
 5. The map is cached. It is built again on request when the index changed.
@@ -61,29 +64,92 @@ def _vectors() -> tuple[list[dict], np.ndarray]:
     return files, np.array(vecs, dtype=np.float32)
 
 
-def _layout(X: np.ndarray) -> np.ndarray:
+SEED = 7
+# A file whose cosine to its group centre is below this stays grey (no group).
+MIN_COS = 0.55
+
+
+def _pca2(X: np.ndarray) -> np.ndarray:
+    """The first two principal directions of the rows of X, as a (d, 2) matrix."""
+    Xc = X - X.mean(axis=0)
+    if len(X) < 2 or not np.any(Xc):
+        return np.eye(X.shape[1], 2, dtype=np.float32)
+    _, _, vt = np.linalg.svd(Xc, full_matrices=False)
+    out = vt[:2].T
+    return out if out.shape[1] == 2 else np.pad(out, ((0, 0), (0, 2 - out.shape[1])))
+
+
+def _kmeans(X: np.ndarray, k: int, iters: int = 30) -> tuple[np.ndarray, np.ndarray]:
+    """Spherical k-means (cosine), k-means++ start with a fixed seed: the same index gives the same map."""
+    rng = np.random.default_rng(SEED)
+    n = len(X)
+    cent = [X[rng.integers(n)]]
+    best = 1 - X @ cent[0]
+    for _ in range(1, k):
+        p = np.clip(best, 0, None) ** 2
+        i = int(rng.choice(n, p=p / p.sum())) if p.sum() > 0 else int(rng.integers(n))
+        cent.append(X[i])
+        best = np.minimum(best, 1 - X @ X[i])
+    C = np.array(cent, dtype=np.float32)
+    labels = np.zeros(n, dtype=int)
+    for _ in range(iters):
+        sims = X @ C.T
+        new = sims.argmax(axis=1)
+        if _ > 0 and np.array_equal(new, labels):
+            break
+        labels = new
+        for j in range(k):
+            m = X[labels == j]
+            if len(m):
+                c = m.sum(axis=0)
+                C[j] = c / (np.linalg.norm(c) or 1.0)
+    return labels, C
+
+
+def _clusters(X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Group labels (-1: no group) and the group centres."""
+    n = len(X)
+    if n < 6:
+        return (np.zeros(n, dtype=int), X.mean(axis=0, keepdims=True)) if n else (np.zeros(0, dtype=int), np.zeros((0, 0)))
+    k = int(np.clip(round(np.sqrt(n / 2)), 2, 40))
+    labels, C = _kmeans(X, k)
+    labels = labels.copy()
+    labels[(X * C[labels]).sum(axis=1) < MIN_COS] = -1
+    # A group of fewer than 3 files is no group (as min_cluster_size was for HDBSCAN).
+    for j in range(k):
+        if 0 < (labels == j).sum() < 3:
+            labels[labels == j] = -1
+    return labels, C
+
+
+def _layout(X: np.ndarray, labels: np.ndarray, C: np.ndarray) -> np.ndarray:
     n = len(X)
     if n < 5:
-        # Too few files for UMAP: a small circle.
+        # Too few files for a map: a small circle.
         ang = np.linspace(0, 2 * np.pi, n, endpoint=False)
         return np.stack([np.cos(ang), np.sin(ang)], axis=1) if n else np.zeros((0, 2))
-    import umap
-
-    import warnings
-
-    warnings.filterwarnings("ignore", message="n_jobs value", category=UserWarning)
-    reducer = umap.UMAP(n_neighbors=min(15, n - 1), min_dist=0.08, metric="cosine", random_state=7, init="random" if n < 30 else "spectral")
-    return reducer.fit_transform(X)
-
-
-def _clusters(Y: np.ndarray) -> np.ndarray:
-    n = len(Y)
-    if n < 6:
-        return np.zeros(n, dtype=int) if n else np.zeros(0, dtype=int)
-    from sklearn.cluster import HDBSCAN
-
-    # "leaf" picks the small dense groups (bills, lecture notes, logs), not two halves of the map.
-    return HDBSCAN(min_cluster_size=max(3, n // 60), min_samples=2, cluster_selection_method="leaf", copy=True).fit_predict(Y)
+    P = _pca2(X)
+    Y = X @ P  # grey files: their place on the plane of all files
+    used = sorted(int(j) for j in set(labels.tolist()) if j >= 0)
+    if not used:
+        return Y
+    centres = C[used] @ P if len(used) < 3 else C[used] @ _pca2(C[used])
+    centres = (centres - centres.mean(axis=0)) / (np.abs(centres - centres.mean(axis=0)).max() or 1.0)
+    # Each group gets a disc that does not reach the next centre.
+    if len(used) > 1:
+        d = np.sqrt(((centres[:, None] - centres[None]) ** 2).sum(-1))
+        np.fill_diagonal(d, np.inf)
+        radius = 0.45 * d.min(axis=1)
+    else:
+        radius = np.array([0.8])
+    scale = np.abs(Y).max() or 1.0
+    Y = 1.15 * Y / scale
+    for slot, j in enumerate(used):
+        idx = np.flatnonzero(labels == j)
+        local = (X[idx] - C[j]) @ _pca2(X[idx])
+        r = np.abs(local).max() or 1.0
+        Y[idx] = centres[slot] + radius[slot] * local / r
+    return Y
 
 
 NAME_SCHEMA = {
@@ -126,13 +192,14 @@ def _names(groups: dict[int, list[dict]]) -> dict[int, str]:
     return out
 
 
-def build() -> dict:
+def build(claimed: bool = False) -> dict:
+    """`claimed` means that build_async() already set the building flag for this run."""
     from . import lite
 
     if not lite.enabled("galaxy"):
         raise ValueError("The file map by meaning is off (lite mode). The link graph still works.")
     with _lock:
-        if _state["building"]:
+        if _state["building"] and not claimed:
             return status()
         _state.update(building=True, error=None, progress="reading vectors")
     try:
@@ -140,8 +207,8 @@ def build() -> dict:
         sig = _signature()
         files, X = _vectors()
         _state["progress"] = f"placing {len(files)} files"
-        Y = _layout(X)
-        labels = _clusters(Y)
+        labels, C = _clusters(X)
+        Y = _layout(X, labels, C)
         if len(Y):
             Y = (Y - Y.mean(axis=0)) / (np.abs(Y - Y.mean(axis=0)).max() or 1.0)
         groups: dict[int, list[dict]] = {}
@@ -184,10 +251,12 @@ def build_async() -> dict:
 
     if not lite.enabled("galaxy"):
         raise ValueError("The file map by meaning is off (lite mode). The link graph still works.")
-    if not _state["building"]:
-        threading.Thread(target=lambda: _safe(build), name="galaxy", daemon=True).start()
-        _state["building"] = True
-        _state["progress"] = "starting"
+    with _lock:
+        if _state["building"]:
+            return status()
+        # Set the flag before the thread starts: a thread that runs late must not see it as another build.
+        _state.update(building=True, error=None, progress="starting")
+    threading.Thread(target=lambda: _safe(lambda: build(claimed=True)), name="galaxy", daemon=True).start()
     return status()
 
 

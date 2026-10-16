@@ -71,6 +71,22 @@ NEAR_LIMIT = 8000
 
 
 COLOR_MAX = 40  # distance of the average colors (0 to 441): the hash sees shapes only
+_DCT = None
+
+
+def _dct2(g):
+    """The 2D DCT-II with orthonormal scaling (as scipy.fft.dctn(g, norm="ortho")) for a 32 x 32 block. NumPy
+    only: SciPy came into the package only through UMAP and scikit-learn (PLAN3 P1-4)."""
+    import numpy as np
+
+    global _DCT
+    if _DCT is None:
+        n = g.shape[0]
+        k, i = np.arange(n)[:, None], np.arange(n)[None, :]
+        d = np.sqrt(2 / n) * np.cos(np.pi * (2 * i + 1) * k / (2 * n))
+        d[0] /= np.sqrt(2)
+        _DCT = d.astype(np.float64)
+    return _DCT @ g @ _DCT.T
 
 
 def phash(path: str) -> tuple[int, int, int, int] | None:
@@ -79,7 +95,6 @@ def phash(path: str) -> tuple[int, int, int, int] | None:
     night match: the average color tells them apart."""
     import numpy as np
     from PIL import Image
-    from scipy.fft import dctn
 
     try:
         with Image.open(path) as im:
@@ -90,7 +105,7 @@ def phash(path: str) -> tuple[int, int, int, int] | None:
             r, gg, b = (int(x) for x in np.asarray(small, dtype=np.float32).reshape(-1, 3).mean(axis=0))
     except Exception:  # noqa: BLE001
         return None
-    d = dctn(g, norm="ortho")[:8, :8].flatten()
+    d = _dct2(g.astype(np.float64))[:8, :8].flatten()
     bits = d[1:] > np.median(d[1:])
     v = 0
     for bit in bits:

@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 
 import httpx
@@ -245,30 +246,58 @@ def groq_stream(system: str, user: str, max_tokens: int = 900):
 
 
 def claude_stream(system: str, user: str, max_tokens: int = 900):
-    """`claude -p` gives the whole answer at the end. Yields the model name, then the text."""
+    """`claude -p` with stream-json output (PLAN3 P1-8). Yields the model name, then each piece of text as it
+    comes. The safe flags are the same as in claude_p()."""
     _ = max_tokens
     if not claude_ok():
         raise CloudError("The claude CLI is not installed")
     model = db.get_setting("claude_model") or "sonnet"
     cmd = [
         "claude", "-p", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands",
-        "--setting-sources", "", "--output-format", "json", "--model", model, "--system-prompt", system,
+        "--setting-sources", "", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+        "--model", model, "--system-prompt", system,
     ]
     yield f"claude -p · {model}"
     with tempfile.TemporaryDirectory(prefix="raven-claude-") as tmp:
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=tmp,
+                                env=claude_env())
+        timed_out = threading.Event()
+        timer = threading.Timer(180, lambda: (timed_out.set(), proc.kill()))
+        timer.start()
+        streamed, final, error = False, "", None
         try:
-            r = subprocess.run(cmd, input=user.encode(), cwd=tmp, capture_output=True, timeout=180, env=claude_env())
-        except subprocess.TimeoutExpired as e:
-            raise CloudError("claude -p timed out") from e
-    if r.returncode != 0:
-        raise CloudError(f"claude -p failed: {(r.stderr or r.stdout).decode(errors='replace')[:200]}")
-    try:
-        out = json.loads(r.stdout)
-    except json.JSONDecodeError as e:
-        raise CloudError("claude -p did not return JSON") from e
-    if out.get("is_error"):
-        raise CloudError(f"claude -p error: {str(out.get('result'))[:200]}")
-    yield str(out.get("result") or "")
+            proc.stdin.write(user.encode())
+            proc.stdin.close()
+            for raw in proc.stdout:
+                try:
+                    e = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                kind = e.get("type")
+                if kind == "stream_event":
+                    ev = e.get("event") or {}
+                    delta = ev.get("delta") or {}
+                    if ev.get("type") == "content_block_delta" and delta.get("type") == "text_delta" and delta.get("text"):
+                        streamed = True
+                        yield delta["text"]
+                elif kind == "result":
+                    final = str(e.get("result") or "")
+                    if e.get("is_error"):
+                        error = final[:200] or "unknown error"
+            proc.wait()
+        finally:
+            timer.cancel()
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+    if timed_out.is_set():
+        raise CloudError("claude -p timed out")
+    if error:
+        raise CloudError(f"claude -p error: {error}")
+    if proc.returncode != 0 and not (streamed or final):
+        raise CloudError(f"claude -p failed: {proc.stderr.read().decode(errors='replace')[:200]}")
+    if not streamed and final:
+        yield final  # an older claude without partial messages: the whole answer at the end
 
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1"
