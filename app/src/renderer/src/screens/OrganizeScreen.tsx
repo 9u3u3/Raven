@@ -600,7 +600,7 @@ function MapView() {
         ) : (
           <div className="anim-fade flex flex-1 flex-col items-center justify-center gap-3 text-center">
             <div className="serif text-[20px]">Map one folder</div>
-            <p className="max-w-[420px] text-muted">Raven reads only the folder that you name, and links its files by their content.</p>
+            <p className="max-w-[420px] text-muted">Raven reads only the folder that you name.</p>
             {here && (
               <button className="link mono text-[12px] text-accent" onClick={() => map(here)}>
                 Map {tildify(here, home)}

@@ -55,7 +55,7 @@ def main() -> int:
     ap.add_argument("--fonts", default="", help="inter,commit,geist,jetbrains,plex,system: one screenshot set per font")
     ap.add_argument("--theme", default="", help="light or dark (default: follow the system)")
     a = ap.parse_args()
-    out = Path(a.out)
+    out = Path(a.out).resolve()  # Electron runs in app/, so a relative path would point there
     out.mkdir(parents=True, exist_ok=True)
     root = str((HERE / "device").resolve())
     if not a.no_build:
