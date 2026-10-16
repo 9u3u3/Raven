@@ -29,16 +29,17 @@ function FolderRules() {
   const policies = useApp((s) => s.policies)
   useEffect(() => void loadPolicies(), [])
   if (!policies.length) return <div className="py-2 text-muted">None. Right-click a folder, Folder rules.</div>
+  const cols = `minmax(0,1fr) repeat(${POLICY_NAMES.length}, auto)`
   return (
     <div>
-      <div className="grid grid-cols-[minmax(0,1fr)_repeat(4,auto)] items-center gap-x-4 border-b border-line pb-1 text-[11px] text-muted">
+      <div className="grid items-center gap-x-4 border-b border-line pb-1 text-[11px] text-muted" style={{ gridTemplateColumns: cols }}>
         <span />
         {POLICY_NAMES.map(([k, l]) => (
           <span key={k}>{l}</span>
         ))}
       </div>
       {policies.map((p) => (
-        <div key={p.path} className="grid grid-cols-[minmax(0,1fr)_repeat(4,auto)] items-center gap-x-4 border-b border-line/70 py-1.5">
+        <div key={p.path} className="grid items-center gap-x-4 border-b border-line/70 py-1.5" style={{ gridTemplateColumns: cols }}>
           <span className="mono truncate text-[12px]" title={p.path}>
             {p.path}
           </span>
@@ -50,6 +51,23 @@ function FolderRules() {
         </div>
       ))}
     </div>
+  )
+}
+
+type Update = { enabled: boolean; current: string; latest?: string; url?: string; newer?: boolean; error?: string }
+
+/** Opt-in update check: one request a day to the release feed, never with file data. */
+function UpdateRow({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  const [u, setU] = useState<Update | null>(null)
+  useEffect(() => {
+    if (on) void get<Update>('/update').then(setU).catch(() => setU(null))
+    else setU(null)
+  }, [on])
+  const note = !u?.enabled ? undefined : u.error ? u.error : u.newer ? `Raven ${u.latest} is out: ${u.url}` : `Raven ${u.current} is the latest.`
+  return (
+    <Row label="Check for updates" text={note}>
+      <Switch on={on} label="Check for updates" onChange={onChange} />
+    </Row>
   )
 }
 
@@ -581,6 +599,7 @@ export default function SettingsScreen() {
             >
               <Switch on={!!settings.index_code} label="Read code projects" onChange={(v) => void setSetting('index_code', v)} />
             </Row>
+            <UpdateRow on={!!settings.update_check} onChange={(v) => void setSetting('update_check', v)} />
           </Section>
 
           <Section id="rules" i={8} title="Folder rules">

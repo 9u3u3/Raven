@@ -30,6 +30,10 @@ SUFFIXES = (".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".tar.zst
             ".rar", ".iso", ".jar", ".apk", ".cbz")
 MAX_MEMBERS = 50_000
 CACHE_MAX = 2 * 1024**3
+# Limits for one extraction (zip bombs, PLAN3 phase 8). The free disk space is a limit too.
+EXTRACT_MAX_BYTES = 100 * 1024**3
+EXTRACT_MAX_FILES = 500_000
+DISK_MARGIN = 1024**3
 _lock = threading.Lock()
 _index: dict[str, tuple[float, list[dict]]] = {}
 
@@ -201,8 +205,12 @@ def member_file(path: str) -> str:
     out = CACHE / key / inner
     if out.exists():
         return str(out)
-    if not any(m["name"] == inner and not m["is_dir"] for m in _members(archive)):
+    hit = next((m for m in _members(archive) if m["name"] == inner and not m["is_dir"]), None)
+    if hit is None:
         raise FileNotFoundError(path)
+    if hit["size"] > CACHE_MAX:
+        raise ArchiveError(f"This member is {hit['size'] / 1024**3:,.1f} GB. Extract the archive to open it.", 413)
+    check_room(hit["size"], 1, CACHE.parent)
     if ".." in PurePosixPath(inner).parts:
         raise ArchiveError("Raven does not extract a member whose path leaves the archive", 400)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -266,6 +274,47 @@ def info(path: str) -> dict:
 # ---------------------------------------------------------------- extract and create
 
 
+def check_room(total: int, files: int, dst: str | Path) -> None:
+    """Refuse an extraction that writes more than the limits or more than the free disk space."""
+    if files > EXTRACT_MAX_FILES:
+        raise ArchiveError(f"The archive has {files:,} files. Raven extracts at most {EXTRACT_MAX_FILES:,}.", 413)
+    if total > EXTRACT_MAX_BYTES:
+        raise ArchiveError(f"The archive expands to {total / 1024**3:,.1f} GB. Raven extracts at most "
+                           f"{EXTRACT_MAX_BYTES // 1024**3} GB.", 413)
+    free = shutil.disk_usage(dst).free
+    if total > free - DISK_MARGIN:
+        raise ArchiveError(f"The archive expands to {total / 1024**3:,.1f} GB, but the disk has only "
+                           f"{max(free, 0) / 1024**3:,.1f} GB free.", 507)
+
+
+def totals_7z(archive: str) -> tuple[int, int]:
+    """The expanded size and the file count from the 7z headers."""
+    _tool("7z")
+    r = subprocess.run(["7z", "l", "-slt", "-ba", archive], capture_output=True, text=True, timeout=600)
+    if r.returncode != 0:
+        raise ArchiveError(f"7z cannot read this archive: {(r.stderr or r.stdout).strip().splitlines()[-1:]}", 422)
+    total = files = 0
+    for line in r.stdout.splitlines():
+        k, _, v = line.partition(" = ")
+        if k == "Path":
+            files += 1
+        elif k == "Size" and v.strip().isdigit():
+            total += int(v)
+    return total, files
+
+
+class _Budget:
+    """Counts the members of a streamed tar while they arrive, because a stream has no index first."""
+
+    def __init__(self, dst: Path):
+        self.dst, self.total, self.files = dst, 0, 0
+
+    def add(self, m: tarfile.TarInfo) -> None:
+        self.files += 1
+        self.total += max(m.size, 0)
+        check_room(self.total, self.files, self.dst)
+
+
 def _safe_members_zip(z: zipfile.ZipFile, dst: Path) -> None:
     for i in z.infolist():
         target = (dst / i.filename).resolve()
@@ -294,17 +343,29 @@ def extract(archive: str, dst_dir: str | None = None) -> str:
         if fmt == "zip":
             with zipfile.ZipFile(archive) as z:
                 _safe_members_zip(z, tmp)
+                infos = z.infolist()
+                # zipfile stops each member at its declared size, so the header sum is a true limit.
+                check_room(sum(i.file_size for i in infos), len(infos), tmp)
                 z.extractall(tmp)
         elif fmt == "tar":
             with tarfile.open(archive) as t:
-                t.extractall(tmp, filter="data")
+                ms = t.getmembers()
+                check_room(sum(max(m.size, 0) for m in ms), len(ms), tmp)
+                t.extractall(tmp, members=ms, filter="data")
         elif fmt == "tzst":
             _tool("zstd")
             proc = subprocess.Popen(["zstd", "-dc", archive], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            with tarfile.open(fileobj=proc.stdout, mode="r|") as t:
-                t.extractall(tmp, filter="data")
-            proc.wait()
+            budget = _Budget(tmp)
+            try:
+                with tarfile.open(fileobj=proc.stdout, mode="r|") as t:
+                    for m in t:
+                        budget.add(m)
+                        t.extract(m, tmp, filter="data")
+            finally:
+                proc.kill()
+                proc.wait()
         else:
+            check_room(*totals_7z(archive), tmp)
             _tool("7z")
             r = subprocess.run(["7z", "x", "-y", f"-o{tmp}", archive], capture_output=True, text=True, timeout=3600)
             if r.returncode != 0:

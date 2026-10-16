@@ -1,0 +1,75 @@
+# Checks on each push and pull request: sidecar tests on three systems, the TypeScript check, and audits
+# of the Python and Node dependencies. The release build is in build.yml.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-14]
+    runs-on: ${{ matrix.os }}
+    # The tests use Linux paths and the FreeDesktop trash. Nobody has run them on Windows or macOS yet,
+    # so a failure there does not fail the run. Remove this line when those two systems are green.
+    continue-on-error: ${{ matrix.os != 'ubuntu-22.04' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Archive tools
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then sudo apt-get install -y -q zstd p7zip-full; fi
+          if [ "$RUNNER_OS" = macOS ]; then brew install zstd p7zip; fi
+          if [ "$RUNNER_OS" = Windows ]; then choco install -y zstandard 7zip; fi
+
+      - name: Tests
+        working-directory: core
+        run: |
+          uv sync --dev --frozen
+          uv run pytest -q
+
+  audit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Python dependencies (pip-audit)
+        working-directory: core
+        run: |
+          uv export --frozen --no-hashes --no-emit-project --format requirements-txt > "$RUNNER_TEMP/req.txt"
+          uvx pip-audit -r "$RUNNER_TEMP/req.txt" --disable-pip --no-deps
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: TypeScript check and Node dependencies (pnpm audit)
+        working-directory: app
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm audit --prod

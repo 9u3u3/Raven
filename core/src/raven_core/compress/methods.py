@@ -223,8 +223,11 @@ def extract_archive(method: str, dst: str, out: str) -> None:
     from ..fs.network import readable
 
     dst = readable(dst)
+    from ..fs.archive import check_room, totals_7z
+
     os.makedirs(out, exist_ok=True)
     if method == "7z":
+        check_room(*totals_7z(dst), out)
         _run(["7z", "x", "-y", "-snl", f"-o{out}", dst])
     elif method == "tar.zst":
         with subprocess.Popen(["zstd", "-q", "-dc", dst], stdout=subprocess.PIPE) as z:
@@ -234,6 +237,8 @@ def extract_archive(method: str, dst: str, out: str) -> None:
                 raise CompressError("zstd failed while it read the archive")
     elif method == "zip":
         with zipfile.ZipFile(dst) as z:
+            infos = z.infolist()
+            check_room(sum(i.file_size for i in infos), len(infos), out)
             z.extractall(out)
     else:
         raise CompressError(f"Unknown archive method {method}")

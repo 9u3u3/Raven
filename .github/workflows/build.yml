@@ -1,6 +1,13 @@
 # Build Raven for Linux (AppImage), Windows (NSIS installer) and macOS (dmg).
 # PyInstaller cannot build for another OS, so each OS builds its own sidecar.
 # It runs on a version tag (v0.3.0) or by hand (Actions, Build, Run workflow). A normal push does not run it.
+#
+# Signing: add these repository secrets, and electron-builder signs the builds. Without them, the builds
+# are not signed.
+#   Windows: WIN_CSC_LINK (the .pfx file as base64) and WIN_CSC_KEY_PASSWORD.
+#   macOS:   MAC_CSC_LINK (the .p12 file as base64), MAC_CSC_KEY_PASSWORD, and for notarization
+#            APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID.
+# Each run also makes SHA256SUMS.txt. A tag run puts the builds and the sums in a draft release.
 name: Build
 
 on:
@@ -46,7 +53,16 @@ jobs:
 
       - name: App
         working-directory: app
+        env:
+          CSC_LINK: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK || runner.os == 'macOS' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WIN_CSC_KEY_PASSWORD || runner.os == 'macOS' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
         run: |
+          # No certificate: do not look for one in the keychain, and build without a signature.
+          if [ -z "$CSC_LINK" ]; then export CSC_IDENTITY_AUTO_DISCOVERY=false; unset CSC_LINK CSC_KEY_PASSWORD; fi
           pnpm install --frozen-lockfile
           pnpm exec tsc --noEmit -p tsconfig.json
           pnpm exec electron-vite build
@@ -60,3 +76,31 @@ jobs:
             app/release/*.exe
             app/release/*.dmg
           if-no-files-found: error
+
+  sums:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: SHA-256 sums
+        working-directory: dist
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: raven-sha256sums
+          path: dist/SHA256SUMS.txt
+
+      - name: Draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --draft --title "Raven $GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"

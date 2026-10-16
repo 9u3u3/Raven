@@ -1510,6 +1510,13 @@ def get_settings():
     return out
 
 
+@app.get("/update")
+def update_check(force: bool = False):
+    from . import update
+
+    return update.check(force)
+
+
 class SettingBody(BaseModel):
     key: str
     value: Any
@@ -1557,7 +1564,7 @@ def set_setting(b: SettingBody):
     allowed = {"embed_model", "index_hidden", "ai_mode", "theme", "favorites", "show_hidden", "view", "mcp_enabled", "binary_vectors",
                "power_user", "first_run_done",
                "groq_api_key", "groq_model", "claude_model", "cloud_provider", "anthropic_api_key", "anthropic_model",
-               "claude_config_dir", "index_code", "habits"}
+               "claude_config_dir", "index_code", "habits", "update_check"}
     if b.key == "cloud_provider" and b.value not in ("auto", "groq", "claude", "anthropic"):
         raise HTTPException(400, "cloud_provider must be auto, groq, claude or anthropic")
     if b.key.endswith("_api_key") and isinstance(b.value, str):
