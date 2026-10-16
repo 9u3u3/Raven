@@ -3,7 +3,7 @@
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell } from 'electron'
 import { ChildProcess, spawn } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import net from 'node:net'
@@ -71,8 +71,9 @@ async function waitHealth(timeoutMs: number, child?: ChildProcess): Promise<bool
 }
 
 /** The sidecar command: the frozen binary in a package, the venv Python in development. */
+// The token goes in RAVEN_TOKEN (startSidecar), not in argv: every user can read argv with ps (PLAN3 P0-1).
 function sidecarCommand(port: number): { cmd: string; argv: string[]; cwd: string } {
-  const flags = ['--port', String(port), '--token', cfg.token]
+  const flags = ['--port', String(port)]
   if (app.isPackaged) {
     // electron-builder copies core/dist/raven-core to <resources>/raven-core (PyInstaller, its own Python).
     const dir = join(process.resourcesPath, 'raven-core')
@@ -92,7 +93,13 @@ async function startSidecar(): Promise<void> {
     cwd,
     // Fewer malloc arenas: about 15 threads otherwise keep freed memory each (gigabytes on a large index).
     // RAVEN_PARENT_PID: the sidecar exits by itself when this process is gone (a kill, a crash, Ctrl+C).
-    env: { ...process.env, PYTHONUNBUFFERED: '1', MALLOC_ARENA_MAX: process.env.MALLOC_ARENA_MAX ?? '2', RAVEN_PARENT_PID: String(process.pid) },
+    env: {
+      ...process.env,
+      PYTHONUNBUFFERED: '1',
+      MALLOC_ARENA_MAX: process.env.MALLOC_ARENA_MAX ?? '2',
+      RAVEN_PARENT_PID: String(process.pid),
+      RAVEN_TOKEN: cfg.token
+    },
     stdio: ['ignore', 'inherit', 'inherit']
   })
   sidecar.on('exit', (code) => {
@@ -319,6 +326,24 @@ function registerIpc(): void {
     if (!sidecar) await startSidecar()
   })
 }
+
+// One app for each data folder (PLAN3 P0-6): a second start focuses the first window. Electron ties the lock
+// to the userData folder, so a run with its own RAVEN_DATA_DIR (tests, screenshots, demos) gets its own
+// userData folder and runs next to the normal app.
+if (process.env.RAVEN_DATA_DIR) {
+  const key = createHash('sha256').update(resolve(process.env.RAVEN_DATA_DIR)).digest('hex').slice(0, 12)
+  app.setPath('userData', join(app.getPath('userData'), 'instances', key))
+}
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+  process.exit(0)
+}
+app.on('second-instance', () => {
+  if (!win) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+})
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)

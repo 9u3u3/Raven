@@ -39,6 +39,46 @@ def test_only_indexed_folders(root):
     assert mcp_gate._in(str(root / "x")) == str(root / "x")
 
 
+def test_link_out_of_the_root_is_refused(root, tmp_path_factory):
+    outside = tmp_path_factory.mktemp("outside") / "id_ed25519"
+    outside.write_text("secret")
+    (root / "notes.txt").symlink_to(outside)
+    with pytest.raises(HTTPException) as e:
+        mcp_gate.read(str(root / "notes.txt"), 2000)
+    assert e.value.status_code == 403
+
+
+@pytest.mark.parametrize("rel", [".ssh/config", ".config/app/cookies.txt", ".bash_history", "proj/.git/config",
+                                 "proj/node_modules/x/README.md"])
+def test_excluded_and_hidden_paths_are_refused(root, rel):
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("x")
+    with pytest.raises(HTTPException) as e:
+        mcp_gate._in(str(p))
+    assert e.value.status_code == 403
+
+
+def test_hidden_files_follow_the_index_setting(root):
+    p = root / ".notes" / "a.md"
+    p.parent.mkdir()
+    p.write_text("x")
+    db.set_setting("index_hidden", True)
+    try:
+        assert mcp_gate._in(str(p)) == str(p)
+    finally:
+        db.set_setting("index_hidden", False)
+    # .ssh stays out even when the index includes hidden files.
+    (root / ".ssh").mkdir()
+    (root / ".ssh" / "config").write_text("x")
+    db.set_setting("index_hidden", True)
+    try:
+        with pytest.raises(HTTPException):
+            mcp_gate._in(str(root / ".ssh" / "config"))
+    finally:
+        db.set_setting("index_hidden", False)
+
+
 def test_read_is_redacted_and_logged(root):
     p = root / "note.txt"
     p.write_text("Contact rahul.sharma@example.com or 9876543210. The rent is 18,000.")

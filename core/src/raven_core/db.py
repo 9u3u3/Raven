@@ -10,6 +10,7 @@ from typing import Any, Iterator
 
 import sqlite_vec
 
+from . import config
 from .config import DB_PATH
 
 SCHEMA = """
@@ -104,6 +105,9 @@ def _open() -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
+    # SQLite makes the file, the WAL and the SHM with mode 0644. The data folder is 0700 already, but the
+    # files get 0600 too (PLAN3 P0-2). This also covers the file that an encrypt or a decrypt swaps in.
+    config.protect_data_files()
     return conn
 
 

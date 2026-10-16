@@ -9,11 +9,34 @@ from platformdirs import user_data_dir
 
 VERSION = "0.2.0"
 
-DATA_DIR = Path(os.environ.get("RAVEN_DATA_DIR") or user_data_dir("raven", appauthor=False))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def private_dir(path: Path) -> Path:
+    """Make a folder that only this user can open (PLAN3 P0-2). The index holds the text of every indexed
+    file, the PII spans, the ledger and the settings. A folder that exists gets mode 0700 again."""
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name != "nt":  # Windows: the profile folder gives access to this user only.
+        try:
+            os.chmod(path, 0o700)
+        except OSError:
+            pass
+    return path
+
+
+DATA_DIR = private_dir(Path(os.environ.get("RAVEN_DATA_DIR") or user_data_dir("raven", appauthor=False)))
 DB_PATH = DATA_DIR / "raven.db"
-THUMB_DIR = DATA_DIR / "thumbs"
-THUMB_DIR.mkdir(parents=True, exist_ok=True)
+THUMB_DIR = private_dir(DATA_DIR / "thumbs")
+
+
+def protect_data_files() -> None:
+    """Mode 0600 for the database files that older versions made with 0644."""
+    if os.name == "nt":
+        return
+    for p in DATA_DIR.glob("raven.db*"):
+        try:
+            os.chmod(p, 0o600)
+        except OSError:
+            pass
 
 OLLAMA_URL = os.environ.get("RAVEN_OLLAMA_URL", "http://127.0.0.1:11434")
 EMBED_MODEL = os.environ.get("RAVEN_EMBED_MODEL", "embeddinggemma")

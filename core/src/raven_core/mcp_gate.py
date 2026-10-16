@@ -40,17 +40,34 @@ def _need() -> None:
         raise HTTPException(403, "Raven's MCP access is off. Turn it on in Raven: Settings, MCP clients.")
 
 
+REAL_HOME = os.path.realpath(HOME)
+
+
 def _out(path: str) -> str:
-    return "~" + path[len(HOME):] if path == HOME or path.startswith(HOME + "/") else path
+    # _in() resolves links, so a path can start with the real home (/var/home/... on some systems).
+    for h in (HOME, REAL_HOME):
+        if path == h or path.startswith(h + "/"):
+            return "~" + path[len(h):]
+    return path
 
 
 def _in(path: str) -> str:
-    p = os.path.abspath(os.path.expanduser(path))
-    roots = [os.path.abspath(r) for r in db.get_setting("index_roots", [])]
-    if not any(p == r or p.startswith(r.rstrip("/") + "/") for r in roots):
-        raise HTTPException(403, "Raven shares only files inside its indexed folders.")
+    """The real path, when an MCP client may read it (PLAN3 P0-5). The same limits as the indexer: inside an
+    index root after links are resolved, no excluded folder (.ssh, .config, .git and so on), no hidden file
+    unless the index includes hidden files, and no folder rule against the index or the cloud."""
+    from . import config
     from .fs.props import policy_for
-
+    hidden_ok = bool(db.get_setting("index_hidden", False))
+    p = os.path.realpath(os.path.expanduser(path))
+    roots = [os.path.realpath(r) for r in db.get_setting("index_roots", [])]
+    root = next((r for r in roots if p == r or p.startswith(r.rstrip("/") + "/")), None)
+    if root is None:
+        raise HTTPException(403, "Raven shares only files inside its indexed folders.")
+    parts = Path(os.path.relpath(p, root)).parts if p != root else ()
+    if any(n in config.EXCLUDE_NAMES or (n.startswith(".") and not hidden_ok) for n in parts):
+        raise HTTPException(403, "Raven does not share hidden files or the folders that it does not index.")
+    if policy_for(p, "no_index"):
+        raise HTTPException(403, "A folder rule keeps this folder out of the index.")
     if policy_for(p, "no_cloud"):
         raise HTTPException(403, "A folder rule keeps this folder away from AI outside Raven.")
     return p

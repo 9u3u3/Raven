@@ -35,7 +35,8 @@ from .storage import routes as space
 from .media import routes as media_routes
 
 log = logging.getLogger("raven")
-TOKEN = os.environ.get("RAVEN_TOKEN", "")
+# Pop, not get: the tools that the sidecar starts (claude, 7z, soffice) do not inherit the token (PLAN3 P0-1).
+TOKEN = os.environ.pop("RAVEN_TOKEN", "")
 
 
 _started = {"done": False}

@@ -132,7 +132,10 @@ def _engine(route: Route, src: str, dst_ext: str) -> list[str] | dict:
     if route.engine == "soffice":
         _need("soffice")
         with tempfile.TemporaryDirectory(prefix="raven-lo-") as tmp:
-            profile = Path(tempfile.gettempdir()) / "raven-lo-profile"
+            # In the private data folder: a fixed name in the shared temp folder lets another user plant a profile.
+            from ..config import DATA_DIR, private_dir
+
+            profile = private_dir(DATA_DIR / "lo-profile")
             # A private profile: the conversion works even when LibreOffice is open.
             from ..platform import soffice
 

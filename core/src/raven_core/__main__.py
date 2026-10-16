@@ -1,4 +1,8 @@
-"""Start the sidecar: python -m raven_core --port 0 --token <token>."""
+"""Start the sidecar: python -m raven_core --port 0, with the token in RAVEN_TOKEN.
+
+--token also works, for tests and scripts. The app does not use it, because every user can read the
+command line of a process (PLAN3 P0-1).
+"""
 
 from __future__ import annotations
 
@@ -29,6 +33,29 @@ def _watch_parent() -> None:
                 pass
 
     threading.Thread(target=run, name="parent-watch", daemon=True).start()
+
+
+_lock_file = None
+
+
+def _lock_data_dir() -> None:
+    """One sidecar for each data folder (PLAN3 P0-6). Two sidecars on one database run two indexers that
+    write the same rows. The OS frees the lock when the process ends, also after a crash."""
+    global _lock_file
+    from . import config
+
+    _lock_file = os.fdopen(os.open(config.DATA_DIR / "sidecar.lock", os.O_RDWR | os.O_CREAT, 0o600), "r+")
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            msvcrt.locking(_lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(_lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        raise SystemExit(f"raven-core: another sidecar uses {config.DATA_DIR}. Close it first.") from None
 
 
 def main() -> None:
@@ -65,6 +92,12 @@ def main() -> None:
     if not args.token:
         print(f"RAVEN_TOKEN={token}", flush=True)
 
+    # No global umask: the sidecar also writes the user's own files (copies, conversions, extracts), and those
+    # keep the normal modes. The 0700 data folder keeps other users out of everything inside it (PLAN3 P0-2).
+    from . import config
+
+    config.protect_data_files()
+    _lock_data_dir()
     _watch_parent()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     import uvicorn
