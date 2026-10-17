@@ -1,10 +1,12 @@
-import { Cloud, Cpu, FolderSearch, Folder, KeyRound, Keyboard, Lock, Palette, Plug, Plus, ShieldAlert, X, type LucideIcon } from 'lucide-react'
+import { Cloud, Cpu, FolderSearch, Folder, HelpCircle, KeyRound, Keyboard, Lock, Palette, Plug, ShieldAlert, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { get, post } from '../lib/api'
 import { size, tildify } from '../lib/format'
 import { FONTS, POLICY_NAMES, loadPolicies, refreshPrivacy, say, setPref, togglePolicy, useApp, type Font } from '../store'
 import KeyField from '../components/KeyField'
 import ClaudeAccount from '../components/ClaudeAccount'
+import FeaturePicker, { DeviceLine, useFeatures } from '../components/FeaturePicker'
+import OllamaSetup from '../components/OllamaSetup'
 import { Chip, Ghost, PageHeader, Seg, Switch, Track, stagger } from '../components/ui'
 import { Settings as SettingsIcon } from 'lucide-react'
 import { pickFolder } from '../components/FolderPicker'
@@ -110,11 +112,9 @@ const KEYS: [string, string][] = [
   ['Alt+1 … Alt+9', 'Go to tab 1 … the last tab'],
   ['Middle-click', 'Open a folder in a new tab, or close a tab'],
   ['G then F / S / O / P', 'Go to Files, Space, Organize, Privacy'],
-  ['Ctrl+Shift+D', 'Latency overlay'],
-  ['F12', 'Developer tools']
+  ['Ctrl+Shift+D', 'Latency overlay (development build)'],
+  ['F12', 'Developer tools (development build)']
 ]
-
-const MODELS = ['embeddinggemma', 'qwen3-embedding:0.6b']
 
 /** Encrypted index (secure.py): SQLCipher with a passphrase. The sidecar restarts to swap the files. */
 function EncryptionSection() {
@@ -196,42 +196,124 @@ function EncryptionSection() {
 }
 
 /** Binary vectors with a rescore (section 13.12 item 3): automatic above 50,000 chunks. */
-type LiteStatus = {
-  mode: 'full' | 'lite'
-  suggested: 'full' | 'lite'
-  hardware: { ram: number; vram: number; threads: number; gpu: string | null; on_battery: boolean }
-  features: Record<string, { label: string; on: boolean }>
-  embed_model: string
-  paused: boolean
-}
-
-/** Lite mode (PLAN2 P2-6): the mode, and one switch per AI feature. */
-function LiteControls() {
-  const [l, setL] = useState<LiteStatus | null>(null)
-  useEffect(() => void get<LiteStatus>('/lite').then(setL).catch(() => {}), [])
-  if (!l) return null
-  const setMode = async (mode: 'full' | 'lite'): Promise<void> => {
-    const r = await post<LiteStatus & { reembed: boolean }>('/lite/mode', { mode })
-    setL(r)
-    say(r.reembed ? `${mode === 'lite' ? 'Lite' : 'Full'} mode. Raven reads the meaning again in the background.` : `${mode === 'lite' ? 'Lite' : 'Full'} mode`)
+/** Features and models (PLAN4 section 5.4): the device, Ollama, and one row per feature with its fit. */
+function FeaturesSection() {
+  const [st, load, setSt] = useFeatures()
+  const [testing, setTesting] = useState(false)
+  if (!st) return null
+  const bench = async (): Promise<void> => {
+    setTesting(true)
+    try {
+      await post('/device/bench')
+      await load(true)
+    } finally {
+      setTesting(false)
+    }
   }
-  const gb = (n: number): number => Math.round(n / 1073741824)
+  const usesOllama = st.features.some((f) => f.ollama && (f.always || f.on))
   return (
-    <div className="mb-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <Seg options={[['full', 'Full'], ['lite', 'Lite']]} value={l.mode} onChange={(m) => void setMode(m)} />
-        <span className="mono text-[11px] text-muted">
-          {gb(l.hardware.ram)} GB RAM · {l.hardware.gpu ? `${gb(l.hardware.vram)} GB GPU` : 'no GPU'} · {l.hardware.threads} threads · suggested {l.suggested}
-          {l.paused ? ' · paused on battery' : ''}
+    <Section id="features" title="Features and models" i={3}>
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <DeviceLine d={st.device} />
+        <span className="flex gap-5">
+          <Ghost tone="plain" disabled={testing} onClick={() => void bench()} title="A CPU test of about 1 s. It makes the advice more exact.">
+            {testing ? 'Testing…' : st.device.bench ? `Speed ${st.device.bench} GFLOPS` : 'Test the speed'}
+          </Ghost>
+          <Ghost tone="plain" onClick={() => void load(true)}>
+            Check again
+          </Ghost>
         </span>
       </div>
-      {Object.entries(l.features).map(([k, f]) => (
-        <Row key={k} label={f.label}>
-          <Switch on={f.on} label={f.label} onChange={(v) => void post<LiteStatus>('/lite/feature', { feature: k, on: v }).then(setL)} />
-        </Row>
-      ))}
-      <div className="mono mt-1 text-[11px] text-muted">meaning: {l.embed_model}</div>
-    </div>
+      <Row label="Ollama" text={st.ollama.running ? `${st.ollama.version ?? ''} running${st.ollama.managed ? ', installed by Raven' : ''}` : st.ollama.installed ? 'installed, not running' : 'not installed'}>
+        <Chip tone={st.ollama.running ? 'good' : usesOllama ? 'bad' : 'plain'}>{st.ollama.running ? 'running' : 'off'}</Chip>
+      </Row>
+      {usesOllama && !st.ollama.running && (
+        <div className="mt-3">
+          <OllamaSetup status={st.ollama} onChange={() => void load()} />
+        </div>
+      )}
+      <div className="mt-4">
+        <FeaturePicker st={st} mode="live" onStatus={setSt} />
+      </div>
+    </Section>
+  )
+}
+
+type Notice = { name: string; version?: string; license: string; source?: string; notice?: string }
+type About = { version: string; dev: boolean; notices: { models: Notice[]; programs: Notice[]; python: Notice[]; node: Notice[] } }
+
+/** Help (PLAN4 B5, B6): the version, "Copy diagnostics", the log folder and the third-party notices. */
+function HelpSection() {
+  const [about, setAbout] = useState<About | null>(null)
+  const [logDir, setLogDir] = useState('')
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => void get<About>('/about').then(setAbout).catch(() => {}), [])
+  const copy = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      const r = await get<{ text: string; dir: string }>('/diagnostics')
+      setLogDir(r.dir)
+      await navigator.clipboard.writeText(r.text)
+      say('Copied the diagnostics. They hold no file content and no keys.')
+    } catch (e) {
+      say((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const openLogs = async (): Promise<void> => {
+    const dir = logDir || (await get<{ dir: string }>('/diagnostics')).dir
+    setLogDir(dir)
+    const err = await window.raven?.openPath(dir)
+    if (err) say(err, 'error')
+  }
+  const group = (title: string, rows: Notice[]) =>
+    rows.length > 0 && (
+      <div className="mb-4">
+        <div className="label mb-1">{title}</div>
+        {rows.map((n) => (
+          <div key={`${n.name}${n.version ?? ''}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-line/50 py-1 text-[12px]">
+            <span className="min-w-0 truncate">
+              {n.name} <span className="mono text-muted">{n.version}</span>
+            </span>
+            <span className="min-w-0 truncate text-muted" title={n.notice ?? n.license}>
+              {n.license}
+              {n.notice ? ` · ${n.notice}` : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  return (
+    <Section id="help" title="Help" i={10}>
+      <Row label="Version" text={about?.dev ? 'Development build' : 'Release build'}>
+        <span className="mono">{about?.version ?? ''}</span>
+      </Row>
+      <Row label="Diagnostics" text="A text report for a bug report: the version, the device, the settings without keys, and the last log lines. It holds no file content.">
+        <Ghost disabled={busy} onClick={() => void copy()}>
+          {busy ? 'Collecting…' : 'Copy diagnostics'}
+        </Ghost>
+      </Row>
+      <Row label="Log files" text="Raven keeps 5 log files of 5 MB each.">
+        <Ghost tone="plain" onClick={() => void openLogs()}>
+          Open the log folder
+        </Ghost>
+      </Row>
+      <Row label="Third-party notices" text="The licenses of the models, programs and libraries that Raven uses.">
+        <Ghost tone="plain" onClick={() => setOpen((v) => !v)}>
+          {open ? 'Hide' : 'Show'}
+        </Ghost>
+      </Row>
+      {open && about && (
+        <div className="mt-4">
+          {group('Models', about.notices.models)}
+          {group('Programs', about.notices.programs)}
+          {group('Python libraries (Raven core)', about.notices.python)}
+          {group('JavaScript libraries (the window)', about.notices.node)}
+        </div>
+      )}
+    </Section>
   )
 }
 
@@ -242,8 +324,7 @@ function PerformanceSection() {
   if (!st) return null
   const set = (v: string): void => void post('/settings', { key: 'binary_vectors', value: v }).then(() => setTimeout(load, 1500))
   return (
-    <Section id="performance" title="Performance" i={6}>
-      <LiteControls />
+    <Section id="performance" title="Performance" i={7}>
       <div className="mb-3">
         <Seg
           options={[['auto', `Automatic (from ${st.threshold.toLocaleString()} chunks)`], ['on', 'On'], ['off', 'Off']]}
@@ -328,6 +409,8 @@ export default function SettingsScreen() {
   const font = useApp((s) => s.font)
   const showHidden = useApp((s) => s.showHidden)
   const fullView = useApp((s) => s.fullView)
+  // Development builds only: claude -p and the latency overlay (PLAN4 R1).
+  const dev = useApp((s) => !!s.privacy?.dev)
   const [settings, setSettings] = useState<Record<string, unknown>>({})
   const [manual, setManual] = useState('')
   const [groqModels, setGroqModels] = useState<string[]>([])
@@ -371,14 +454,15 @@ export default function SettingsScreen() {
   const NAV: [string, string, LucideIcon][] = [
     ['folders', 'Indexed folders', FolderSearch],
     ['appearance', 'Appearance', Palette],
+    ['features', 'Features and models', Cpu],
     ['cloud', 'Cloud providers', Cloud],
-    ['models', 'Models', Cpu],
     ['mcp', 'MCP clients', Plug],
     ['security', 'Encryption', Lock],
     ['performance', 'Performance', Cpu],
     ['power', 'Power user', ShieldAlert],
     ['rules', 'Folder rules', ShieldAlert],
-    ['shortcuts', 'Shortcuts', Keyboard]
+    ['shortcuts', 'Shortcuts', Keyboard],
+    ['help', 'Help', HelpCircle]
   ]
   const scroller = useRef<HTMLDivElement>(null)
   const [here, setHere] = useState('folders')
@@ -505,14 +589,16 @@ export default function SettingsScreen() {
             </Row>
           </Section>
 
-          <Section id="cloud" i={3} title="Cloud providers">
+          <FeaturesSection />
+
+          <Section id="cloud" i={4} title="Cloud providers">
             <div className="grid grid-cols-[190px_1fr] items-center gap-x-4 gap-y-3.5">
               <span className="text-muted">Preferred provider</span>
               <select value={(settings.cloud_provider as string) || 'auto'} onChange={(e) => void setSetting('cloud_provider', e.target.value).then(refreshPrivacy)} className="field mono w-full max-w-[420px]">
                 <option value="auto">Automatic</option>
                 <option value="groq">Groq first, the others as fallback</option>
                 <option value="anthropic">Anthropic API first, the others as fallback</option>
-                <option value="claude">claude -p first, the others as fallback</option>
+                {dev && <option value="claude">claude -p first (development build)</option>}
               </select>
               <KeyField provider="groq" setting="groq_api_key" label="Groq API key" placeholder="gsk_… (free at console.groq.com)" stored={settings.groq_api_key as string} onSaved={() => (void reload(), void loadGroqModels())} />
               <span className="text-muted">Groq model</span>
@@ -533,29 +619,18 @@ export default function SettingsScreen() {
                   <option key={m}>{m}</option>
                 ))}
               </select>
-              <span className="text-muted">Claude account</span>
-              <ClaudeAccount />
-              <span className="text-muted">claude -p model</span>
-              <select value={(settings.claude_model as string) || 'sonnet'} onChange={(e) => void setSetting('claude_model', e.target.value)} className="field mono w-full max-w-[420px]">
-                {['sonnet', 'opus', 'haiku'].map((m) => (
-                  <option key={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-          </Section>
-
-          <Section id="models" i={4} title="Models">
-            <div className="grid grid-cols-[190px_1fr] items-center gap-x-4 gap-y-3.5">
-              <span className="text-muted">Text embeddings</span>
-              <select value={(settings.embed_model as string) || index?.embed_model || MODELS[0]} onChange={(e) => void setSetting('embed_model', e.target.value)} className="field mono w-full max-w-[420px]">
-                {MODELS.map((m) => (
-                  <option key={m}>{m}</option>
-                ))}
-              </select>
-              <span className="text-muted">Status</span>
-              <span>
-                <Chip tone={index?.embed_error ? 'bad' : index?.embed_ready ? 'good' : 'plain'}>{index?.embed_error ?? (index?.embed_ready ? 'ready on Ollama' : 'loading')}</Chip>
-              </span>
+              {dev && (
+                <>
+                  <span className="text-muted">Claude account (dev)</span>
+                  <ClaudeAccount />
+                  <span className="text-muted">claude -p model (dev)</span>
+                  <select value={(settings.claude_model as string) || 'sonnet'} onChange={(e) => void setSetting('claude_model', e.target.value)} className="field mono w-full max-w-[420px]">
+                    {['sonnet', 'opus', 'haiku'].map((m) => (
+                      <option key={m}>{m}</option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
           </Section>
 
@@ -620,6 +695,8 @@ export default function SettingsScreen() {
               {!keys.length && <span className="col-span-2 text-muted">No shortcut matches “{keyFilter}”.</span>}
             </div>
           </Section>
+
+          <HelpSection />
         </div>
       </div>
     </div>

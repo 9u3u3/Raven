@@ -4,10 +4,10 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, session, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { ChildProcess, spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import { closeSync, existsSync, mkdtempSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import net from 'node:net'
-import { extname, join, resolve } from 'node:path'
+import { dirname, extname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const OLLAMA_URL = 'http://127.0.0.1:11434'
@@ -26,8 +26,41 @@ const cfg = {
   token: randomBytes(24).toString('hex'),
   mediaToken: randomBytes(24).toString('hex'),
   state: 'starting' as SidecarState,
-  version: ''
+  version: '',
+  // A packaged app is a release build: no test hooks, no screenshot hooks, no developer tools (PLAN4 R1).
+  dev: !app.isPackaged
 }
+// The screenshot hooks (RAVEN_SHOT*) work in development builds only.
+const SHOT = cfg.dev ? process.env.RAVEN_SHOT || '' : ''
+const SHOT_SIZE = cfg.dev ? process.env.RAVEN_SHOT_SIZE || '' : ''
+
+// The app log (PLAN4 B5): main.log in the Electron logs folder, 5 MB, then one old copy. It holds process
+// events and errors, never file content. The sidecar reads it for "Copy diagnostics" (RAVEN_MAIN_LOG).
+const MAIN_LOG = join(app.getPath('logs'), 'main.log')
+function openLog(): void {
+  try {
+    mkdirSync(dirname(MAIN_LOG), { recursive: true, mode: 0o700 })
+    if (existsSync(MAIN_LOG) && statSync(MAIN_LOG).size > 5 * 1024 * 1024) renameSync(MAIN_LOG, `${MAIN_LOG}.1`)
+  } catch {
+    /* no log folder: the console still works */
+  }
+  for (const level of ['log', 'warn', 'error'] as const) {
+    const orig = console[level].bind(console)
+    console[level] = (...args: unknown[]): void => {
+      orig(...args)
+      try {
+        const text = args.map((a) => (a instanceof Error ? a.stack ?? a.message : typeof a === 'string' ? a : JSON.stringify(a))).join(' ')
+        appendFileSync(MAIN_LOG, `${new Date().toISOString()} ${level} ${text.slice(0, 2000)}\n`, { mode: 0o600 })
+      } catch {
+        /* a full disk must not stop the app */
+      }
+    }
+  }
+  process.on('uncaughtException', (err) => console.error('[raven] uncaught', err))
+  process.on('unhandledRejection', (err) => console.error('[raven] unhandled rejection', err))
+  console.log(`[raven] start ${app.getVersion()} ${process.platform} ${process.arch}${cfg.dev ? ' dev' : ''}`)
+}
+openLog()
 
 function coreDir(): string {
   if (process.env.RAVEN_CORE_DIR) return resolve(process.env.RAVEN_CORE_DIR)
@@ -108,7 +141,8 @@ async function startSidecar(): Promise<void> {
       MALLOC_ARENA_MAX: process.env.MALLOC_ARENA_MAX ?? '2',
       RAVEN_PARENT_PID: String(process.pid),
       RAVEN_TOKEN: cfg.token,
-      RAVEN_MEDIA_TOKEN: cfg.mediaToken
+      RAVEN_MEDIA_TOKEN: cfg.mediaToken,
+      RAVEN_MAIN_LOG: MAIN_LOG
     },
     stdio: ['ignore', 'inherit', 'inherit']
   })
@@ -158,14 +192,28 @@ async function ollamaNeeded(): Promise<boolean> {
   }
 }
 
+/** The Ollama program: a system install, or the copy that Raven installed in its data folder (PLAN4 5.3.1). */
+async function ollamaBinary(): Promise<string | null> {
+  if (!cfg.port || !cfg.token) return 'ollama'
+  try {
+    const r = await fetch(`http://127.0.0.1:${cfg.port}/ollama?quick=true`, { headers: { Authorization: `Bearer ${cfg.token}` }, signal: AbortSignal.timeout(4000) })
+    if (!r.ok) return 'ollama'
+    return ((await r.json()) as { path: string | null }).path
+  } catch {
+    return 'ollama'
+  }
+}
+
 /** Start `ollama serve` when it does not run. Its own process group, so a quit also stops its model runners. */
 async function ensureOllama(): Promise<void> {
   if (ollama || (await ollamaUp())) return
   if (ollamaStarts >= 5) return
   if (!(await ollamaNeeded())) return
+  const bin = await ollamaBinary()
+  if (!bin) return // not installed: the setup screen offers the install
   ollamaStarts += 1
   try {
-    const child = spawn('ollama', ['serve'], { stdio: 'ignore', env: { ...process.env }, detached: process.platform !== 'win32' })
+    const child = spawn(bin, ['serve'], { stdio: 'ignore', env: { ...process.env }, detached: process.platform !== 'win32', windowsHide: true })
     ollama = child
     child.on('error', () => ollama === child && (ollama = null))
     child.on('exit', (code) => {
@@ -257,7 +305,7 @@ function runnable(p: string): boolean {
 
 function createWindow(): void {
   // Test hook: RAVEN_SHOT_SIZE=1280x800 sets the window size for screenshots.
-  const shotSize = (process.env.RAVEN_SHOT_SIZE || '').split('x').map(Number)
+  const shotSize = SHOT_SIZE.split('x').map(Number)
   win = new BrowserWindow({
     width: shotSize[0] || 1360,
     height: shotSize[1] || 860,
@@ -276,12 +324,13 @@ function createWindow(): void {
     }
   })
   // A screenshot run (RAVEN_SHOT) keeps the window hidden: it paints anyway, and nothing pops up.
-  win.on('ready-to-show', () => !process.env.RAVEN_SHOT && win?.show())
+  win.on('ready-to-show', () => !SHOT && win?.show())
   // No app menu: its default accelerators (Ctrl+R, Ctrl+W) clash with the Raven keyboard map.
-  // F12 still opens the developer tools.
+  // F12 opens the developer tools in a development build.
   win.webContents.on('before-input-event', (_e, input) => {
-    if (input.type === 'keyDown' && input.key === 'F12') win?.webContents.toggleDevTools()
+    if (cfg.dev && input.type === 'keyDown' && input.key === 'F12') win?.webContents.toggleDevTools()
   })
+  if (!cfg.dev) win.webContents.on('devtools-opened', () => win?.webContents.closeDevTools())
   // Links that try to open a new window go to the system browser only if they are web links.
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   // PLAN3 P1-2: the window shows the app page only. A link to a file or to the sidecar does not replace it.
@@ -293,12 +342,12 @@ function createWindow(): void {
   void win.loadURL(PAGE_URL)
 
   // Test hook: RAVEN_SHOT=<png path> saves a screenshot after RAVEN_SHOT_DELAY ms, then quits.
-  const shot = process.env.RAVEN_SHOT
+  const shot = SHOT
   if (shot) {
     win.webContents.once('did-finish-load', () => {
       // RAVEN_SHOT_SCREEN (files, space, organize, privacy, settings, ask) and RAVEN_SHOT_PATH pick the view.
-      // RAVEN_SHOT_FONT and RAVEN_SHOT_THEME (light, dark) set the look.
-      const view = JSON.stringify({ screen: process.env.RAVEN_SHOT_SCREEN || '', path: process.env.RAVEN_SHOT_PATH || '', font: process.env.RAVEN_SHOT_FONT || '', theme: process.env.RAVEN_SHOT_THEME || '' })
+      // RAVEN_SHOT_FONT and RAVEN_SHOT_THEME (light, dark) set the look. RAVEN_SHOT_SECTION scrolls Settings.
+      const view = JSON.stringify({ screen: process.env.RAVEN_SHOT_SCREEN || '', path: process.env.RAVEN_SHOT_PATH || '', font: process.env.RAVEN_SHOT_FONT || '', theme: process.env.RAVEN_SHOT_THEME || '', section: process.env.RAVEN_SHOT_SECTION || '' })
       setTimeout(() => void win?.webContents.executeJavaScript(`window.__ravenShot && window.__ravenShot(${view})`), 2500)
       setTimeout(async () => {
         const img = await win!.webContents.capturePage()

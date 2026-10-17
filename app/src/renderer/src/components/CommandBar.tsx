@@ -130,7 +130,7 @@ function appCommands(): Cmd[] {
     { label: 'AI mode: Local only', run: () => void setAiMode('local') },
     { label: 'AI mode: Hybrid', run: () => void setAiMode('hybrid') },
     { label: 'AI mode: Ask each time', run: () => void setAiMode('ask') },
-    { label: 'Toggle latency overlay', hint: 'Ctrl+Shift+D', run: () => useApp.setState({ overlay: !s.overlay }) },
+    ...(s.privacy?.dev ? [{ label: 'Toggle latency overlay', hint: 'Ctrl+Shift+D', run: () => useApp.setState({ overlay: !s.overlay }) }] : []),
     { label: 'Theme: follow system', run: () => setPref('theme', 'system') },
     { label: 'Theme: light', run: () => setPref('theme', 'light') },
     { label: 'Theme: dark', run: () => setPref('theme', 'dark') }

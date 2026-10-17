@@ -31,6 +31,14 @@ TOOLS: list[tuple[str, str, str, str, str]] = [
     ("pkexec", "Retry an action as administrator", "polkit", "pkexec", "polkit"),
 ]
 
+# macOS (Homebrew) and Windows (winget) packages. A tool with no entry here is for Linux only.
+BREW = {"soffice": "--cask libreoffice", "pandoc": "pandoc", "ffmpeg": "ffmpeg", "tesseract": "tesseract",
+        "magick": "imagemagick", "7z": "sevenzip", "zstd": "zstd", "cjxl": "jpeg-xl", "avifenc": "libavif",
+        "rclone": "rclone", "smbclient": "samba"}
+WINGET = {"soffice": "TheDocumentFoundation.LibreOffice", "pandoc": "JohnMacFarlane.Pandoc", "ffmpeg": "Gyan.FFmpeg",
+          "tesseract": "UB-Mannheim.TesseractOCR", "magick": "ImageMagick.ImageMagick", "7z": "7zip.7zip",
+          "zstd": "Meta.Zstandard", "cjxl": "libjxl.libjxl", "rclone": "Rclone.Rclone"}
+
 OLLAMA_INSTALL = {
     "linux": "curl -fsSL https://ollama.com/install.sh | sh",
     "darwin": "Download Ollama from https://ollama.com/download/mac",
@@ -59,6 +67,19 @@ def _install(pkgs: list[str]) -> str:
     return "Install: " + ", ".join(pkgs)
 
 
+def _install_all(missing: list[str]) -> str:
+    if not missing:
+        return ""
+    if sys.platform == "darwin":
+        casks = [m.split()[-1] for m in missing if m.startswith("--cask")]
+        plain = [m for m in missing if not m.startswith("--cask")]
+        return " && ".join(x for x in ("brew install " + " ".join(plain) if plain else "",
+                                         "brew install --cask " + " ".join(casks) if casks else "") if x)
+    if sys.platform == "win32":
+        return "; ".join(f"winget install --id {m} -e" for m in missing)
+    return _install(list(dict.fromkeys(missing)))
+
+
 def _found(prog: str) -> bool:
     if prog == "soffice":
         return platform.soffice() is not None
@@ -75,11 +96,9 @@ def ollama_installed() -> bool:
     return False
 
 
-def check() -> dict:
-    from . import models
-    from .router import cloud
-
-    m = models.status()
+def _tools() -> tuple[list[dict], list[str]]:
+    if sys.platform in ("darwin", "win32"):
+        return _tools_other(BREW if sys.platform == "darwin" else WINGET)
     d = _distro()
     col = {"arch": 2, "debian": 3, "ubuntu": 3, "fedora": 4}.get(d)
     tools = []
@@ -90,14 +109,44 @@ def check() -> dict:
         if not ok and pkg:
             missing_pkgs += pkg.split()
         tools.append({"name": prog, "adds": adds, "ok": ok, "install": "" if ok else _install(pkg.split() if pkg else [prog])})
+    return tools, missing_pkgs
+
+
+def _tools_other(pkgs: dict[str, str]) -> tuple[list[dict], list[str]]:
+    """macOS and Windows: the tools that exist there, with a brew or winget command."""
+    brew = sys.platform == "darwin"
+    tools, missing = [], []
+    for prog, adds, *_ in TOOLS:
+        if prog not in pkgs:
+            continue
+        ok = _found(prog)
+        cmd = f"brew install {pkgs[prog]}" if brew else f"winget install --id {pkgs[prog]} -e"
+        if not ok:
+            missing.append(pkgs[prog])
+        tools.append({"name": prog, "adds": adds, "ok": ok, "install": "" if ok else cmd})
+    return tools, missing
+
+
+def check_tools() -> list[dict]:
+    """The optional programs: found or not, and the install command for this system."""
+    return _tools()[0]
+
+
+def check() -> dict:
+    from . import models
+    from .router import cloud
+
+    m = models.status()
+    d = _distro()
+    tools, missing_pkgs = _tools()
     plat = "linux" if sys.platform.startswith("linux") else sys.platform
     return {
         "core": {"version": config.VERSION, "data_dir": str(config.DATA_DIR), "models_dir": str(config.MODELS_DIR),
-                 "platform": plat, "distro": d, "frozen": bool(getattr(sys, "frozen", False))},
+                 "platform": plat, "distro": d, "frozen": config.FROZEN, "dev": config.DEV},
         "ollama": {"installed": ollama_installed(), "running": m["ollama_running"], "url": config.OLLAMA_URL,
                    "install": OLLAMA_INSTALL.get(plat, "https://ollama.com/download")},
         "models": m,
         "tools": tools,
-        "install_all": _install(list(dict.fromkeys(missing_pkgs))) if missing_pkgs else "",
+        "install_all": _install_all(missing_pkgs),
         "cloud": {**cloud.configured(), "ai_mode": db.get_setting("ai_mode") or "hybrid"},
     }

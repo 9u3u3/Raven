@@ -15,7 +15,7 @@ import time
 
 import httpx
 
-from .. import db
+from .. import config, db
 
 GROQ_URL = "https://api.groq.com/openai/v1"
 GROQ_PREFERRED = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant"]
@@ -32,7 +32,9 @@ def groq_key() -> str | None:
 
 
 def claude_ok() -> bool:
-    return shutil.which("claude") is not None
+    """`claude -p` runs with the user's claude.ai login. Anthropic does not allow a third-party product to offer
+    that login without approval, so a release build never uses it (PLAN4 B1). The API key path stays."""
+    return config.DEV and shutil.which("claude") is not None
 
 
 def claude_env(config_dir: str | None = None) -> dict:
@@ -85,7 +87,9 @@ def claude_status(config_dir: str | None = None) -> dict:
 
 
 def claude_accounts() -> list[dict]:
-    """The default account and each ~/.claude-* folder that holds a Claude config."""
+    """The default account and each ~/.claude-* folder that holds a Claude config. None in a release build."""
+    if not config.DEV:
+        return []
     home = os.path.expanduser("~")
     dirs = [""]
     homes = [(home, "~/")]

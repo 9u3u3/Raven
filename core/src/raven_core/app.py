@@ -84,6 +84,11 @@ def _start_services(background: bool = True) -> None:
     from . import habits, lite
 
     lite.apply_priority()
+    from . import device
+    from .router import local as local_llm
+
+    local_llm.load_setting()
+    device.load_bench()
     habits.init()
     habits.prune()
     from .search import folders
@@ -263,7 +268,8 @@ async def os_error(_: Request, e: OSError):
 def health():
     from . import secure
 
-    return {"ok": True, "version": VERSION, "pid": os.getpid(), "data_dir": str(config.DATA_DIR), "locked": secure.locked()}
+    return {"ok": True, "version": VERSION, "pid": os.getpid(), "data_dir": str(config.DATA_DIR), "locked": secure.locked(),
+            "dev": config.DEV}
 
 
 # ---------------------------------------------------------------- models (first run)
@@ -285,6 +291,113 @@ def models_download(b: ModelsBody):
     from . import models
 
     return models.download(b.names)
+
+
+# ---------------------------------------------------------------- device check and features (PLAN4 R2)
+
+
+@app.get("/device")
+async def device_info(fresh: bool = False):
+    from . import device
+
+    d = await run_in_threadpool(device.info, fresh)
+    return {**d, "summary": device.summary(d)}
+
+
+@app.post("/device/bench")
+async def device_bench():
+    """A CPU test of about 1 s. The fit rules use its result."""
+    from . import device
+
+    return {"gflops": await run_in_threadpool(device.bench)}
+
+
+@app.get("/features")
+async def features_status(fresh: bool = False):
+    from . import features
+
+    await run_in_threadpool(features.resume)
+    return await run_in_threadpool(features.status, fresh)
+
+
+class FeaturesBody(BaseModel):
+    on: dict[str, bool] = {}
+    variants: dict[str, str] = {}
+
+
+@app.post("/features/apply")
+async def features_apply(b: FeaturesBody):
+    from . import features
+
+    try:
+        out = await run_in_threadpool(features.apply, b.on, b.variants)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if out["reembed"]:
+        indexer.state["embed_ready"] = False
+        indexer.wake_c.set()
+    return {**out, **(await run_in_threadpool(features.status))}
+
+
+class FeatureRemoveBody(BaseModel):
+    feature: str
+    variant: str | None = None
+
+
+@app.post("/features/remove")
+async def features_remove(b: FeatureRemoveBody):
+    from . import features
+
+    try:
+        out = await run_in_threadpool(features.remove, b.feature, b.variant)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(409, str(e)) from e
+    except (RuntimeError, OSError) as e:
+        raise HTTPException(500, str(e)) from e
+    return {**out, **(await run_in_threadpool(features.status))}
+
+
+@app.get("/ollama")
+async def ollama_status(quick: bool = False):
+    """Installed or not, running or not, the install job, the download size and the steps (PLAN4 5.3.1)."""
+    from . import ollama_setup
+
+    return await run_in_threadpool(ollama_setup.status, quick)
+
+
+@app.post("/ollama/install")
+def ollama_install():
+    from . import ollama_setup
+
+    return ollama_setup.install()
+
+
+@app.post("/ollama/cancel")
+def ollama_cancel():
+    from . import ollama_setup
+
+    ollama_setup.cancel()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- help: logs, diagnostics, notices (PLAN4 R1)
+
+
+@app.get("/diagnostics")
+async def diagnostics():
+    """One text report for a bug report: no file content, no key, no payload. The home folder is "~"."""
+    from . import logs
+
+    return {"text": await run_in_threadpool(logs.diagnostics), **logs.info()}
+
+
+@app.get("/about")
+def about():
+    from . import notices
+
+    return {"version": VERSION, "dev": config.DEV, "notices": notices.load()}
 
 
 # ---------------------------------------------------------------- encrypted index (secure.py)
@@ -1565,8 +1678,10 @@ def set_setting(b: SettingBody):
                "power_user", "first_run_done",
                "groq_api_key", "groq_model", "claude_model", "cloud_provider", "anthropic_api_key", "anthropic_model",
                "claude_config_dir", "index_code", "habits", "update_check"}
-    if b.key == "cloud_provider" and b.value not in ("auto", "groq", "claude", "anthropic"):
-        raise HTTPException(400, "cloud_provider must be auto, groq, claude or anthropic")
+    if b.key == "cloud_provider" and b.value not in ("auto", "groq", "anthropic", *(("claude",) if config.DEV else ())):
+        raise HTTPException(400, "cloud_provider must be auto, groq or anthropic")
+    if b.key in ("claude_model", "claude_config_dir") and not config.DEV:
+        raise HTTPException(400, "claude -p is not part of a release build")
     if b.key.endswith("_api_key") and isinstance(b.value, str):
         b.value = b.value.strip() or None
     if b.key == "ai_mode" and b.value not in ("local", "hybrid", "ask"):

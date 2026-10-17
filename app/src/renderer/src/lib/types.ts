@@ -201,6 +201,7 @@ export type PrivacyStatus = {
   online?: boolean | null
   ai_mode: AiMode
   providers: { groq: boolean; claude: boolean; anthropic?: boolean }
+  dev?: boolean
   groq_model: string | null
   claude_model: string
   anthropic_model?: string

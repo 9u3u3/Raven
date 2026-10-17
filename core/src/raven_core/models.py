@@ -55,6 +55,9 @@ CATALOG: dict[str, dict] = {
 OLLAMA = {
     "embeddinggemma": {"label": "EmbeddingGemma 300M", "adds": "Search by meaning (needed for Ask)", "mb": 620},
     "qwen3:4b": {"label": "Qwen3 4B", "adds": "Ask, summaries, organize plans and the agent, on this computer", "mb": 2500},
+    # The other sizes of the local model (PLAN4 section 5.2): the device check picks one by RAM and GPU.
+    "qwen3:1.7b": {"label": "Qwen3 1.7B", "adds": "The local model for 8 GB of RAM: faster, less exact", "mb": 1400},
+    "qwen3:8b": {"label": "Qwen3 8B", "adds": "The local model for a GPU with 8 GB or a large Mac: more exact", "mb": 5200},
 }
 
 _jobs: dict[str, dict] = {}
@@ -164,3 +167,23 @@ def download(names: list[str]) -> dict:
                 _jobs[n] = {"state": "running", "done": 0, "total": 0, "error": None}
                 threading.Thread(target=_download, args=(n,), name=f"model-{n}", daemon=True).start()
     return status()
+
+
+def ollama_has(model: str, names: set[str] | None) -> bool:
+    return names is not None and (model in names or f"{model}:latest" in names)
+
+
+def remove(name: str) -> None:
+    """Delete a model to free its disk space: the files in the models folder, or the model in Ollama."""
+    import shutil
+
+    if name.startswith("ollama:"):
+        model = name.split(":", 1)[1]
+        r = httpx.request("DELETE", f"{config.OLLAMA_URL}/api/delete", json={"model": model}, timeout=30)
+        if r.status_code not in (200, 404):
+            raise RuntimeError(f"Ollama could not delete {model}: {r.text[:120]}")
+    elif name in CATALOG:
+        shutil.rmtree(_dir(name), ignore_errors=True)
+    else:
+        raise ValueError(f"Unknown model {name}")
+    _jobs.pop(name, None)

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
-export type SidecarConfig = { port: number; token: string; mediaToken?: string; state: 'starting' | 'ok' | 'down'; version: string }
+export type SidecarConfig = { port: number; token: string; mediaToken?: string; state: 'starting' | 'ok' | 'down'; version: string; dev?: boolean }
 
 const api = {
   config: (): Promise<SidecarConfig> => ipcRenderer.invoke('raven:config'),

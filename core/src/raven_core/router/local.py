@@ -11,6 +11,21 @@ import httpx
 from .. import config
 
 LLM = os.environ.get("RAVEN_LLM", "qwen3:4b")
+
+
+def use_model(name: str) -> None:
+    """Switch the local model (the size choice in Features and models, PLAN4 section 5.2)."""
+    global LLM, _seen_ok
+    LLM, _seen_ok = name, 0.0
+
+
+def load_setting() -> None:
+    """The model from the "llm_model" setting. RAVEN_LLM wins, for tests and scripts."""
+    from .. import db
+
+    m = db.get_setting("llm_model")
+    if m and not os.environ.get("RAVEN_LLM"):
+        use_model(str(m))
 _client = httpx.Client(base_url=config.OLLAMA_URL, timeout=httpx.Timeout(300, connect=2))
 
 

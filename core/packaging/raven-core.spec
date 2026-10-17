@@ -11,6 +11,9 @@ for pkg in ("sqlite_vec", "onnxruntime", "tokenizers", "faster_whisper", "ctrans
     binaries += b
     hidden += h
 hidden += collect_submodules("raven_core")
+# The license list for Settings, Help (scripts/notices.py writes it).
+datas += [("../src/raven_core/third_party.json", "raven_core")]
+hidden += ["psutil", "zstandard"]
 # The MCP SDK, without its CLI (it needs typer, and Raven does not use it).
 hidden += collect_submodules("mcp", filter=lambda n: not n.startswith("mcp.cli"))
 datas += collect_data_files("mcp")

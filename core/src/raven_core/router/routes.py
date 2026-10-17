@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from .. import db
+from .. import config, db
 from ..privacy import gate
 from ..privacy.model import model as layer2
 from . import cloud, local
@@ -37,6 +37,7 @@ def status():
     return {
         "ai_mode": core.ai_mode(),
         "providers": cloud.configured(),
+        "dev": config.DEV,
         "groq_model": (db.get_setting("groq_model") or None),
         "claude_model": db.get_setting("claude_model") or "sonnet",
         "claude_account": db.get_setting("claude_config_dir") or "",

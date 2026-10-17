@@ -99,14 +99,17 @@ def main() -> None:
     config.protect_data_files()
     _lock_data_dir()
     _watch_parent()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    from . import logs
+
+    logs.setup(logging.INFO)  # the console and <data dir>/logs (PLAN4 B5)
     # watchfiles logs each batch at INFO ("11 changes detected"). The watchers handle the batches.
     logging.getLogger("watchfiles").setLevel(logging.WARNING)
     import uvicorn
 
     from .app import app
 
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning", access_log=False)
+    # log_config=None: uvicorn errors go to the root handlers, so they reach the log file.
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning", access_log=False, log_config=None)
 
 
 if __name__ == "__main__":

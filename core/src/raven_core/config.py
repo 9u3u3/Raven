@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from platformdirs import user_data_dir
 
 VERSION = "0.2.0"
 
-
+# A packaged build (PyInstaller) is a release build. Developer-only paths stay off in it (PLAN4 R1): the
+# `claude -p` provider, which uses the user's claude.ai login, and the screenshot and test hooks.
+FROZEN = bool(getattr(sys, "frozen", False))
+DEV = not FROZEN
 
 def private_dir(path: Path) -> Path:
     """Make a folder that only this user can open (PLAN3 P0-2). The index holds the text of every indexed

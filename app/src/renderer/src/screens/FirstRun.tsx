@@ -1,25 +1,18 @@
-import { Check, Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import KeyField from '../components/KeyField'
 import ClaudeAccount from '../components/ClaudeAccount'
+import FeaturePicker, { DeviceLine, choiceSize, defaultChoice, useFeatures, type Choice } from '../components/FeaturePicker'
+import OllamaSetup from '../components/OllamaSetup'
 import { indexText } from '../components/StatusLine'
 import { Mark } from '../components/TopBar'
-import { Chip, Ghost, Seg, Track, TreeGuides, stagger } from '../components/ui'
-import { get, on, post } from '../lib/api'
+import { Chip, Ghost, Track, TreeGuides, stagger } from '../components/ui'
+import { get, post } from '../lib/api'
 import { size, tildify } from '../lib/format'
-import { navigate, refreshPrivacy, useApp } from '../store'
+import { navigate, refreshPrivacy, say, useApp } from '../store'
 import { pickFolder } from '../components/FolderPicker'
 
-type Job = { state: string; done: number; total: number; error: string | null }
-type ModelRow = { name: string; label: string; adds: string; mb: number; present: boolean; job?: Job | null }
-type Models = { files: ModelRow[]; ollama: ModelRow[]; ollama_running: boolean; dir: string }
-type Tool = { name: string; adds: string; ok: boolean; install: string }
 type Check = {
-  core: { version: string; data_dir: string; models_dir: string; platform: string; distro: string; frozen: boolean }
-  ollama: { installed: boolean; running: boolean; url: string; install: string }
-  models: Models
-  tools: Tool[]
-  install_all: string
+  core: { version: string; data_dir: string; models_dir: string; platform: string; distro: string; frozen: boolean; dev?: boolean }
   cloud: { groq: boolean; claude: boolean; anthropic: boolean; ai_mode: string }
 }
 
@@ -36,8 +29,8 @@ function State({ ok, text }: { ok: boolean | null; text: string }) {
   return <Chip tone={ok === null ? 'plain' : ok ? 'good' : 'bad'}>{text}</Chip>
 }
 
-function pct(j?: Job | null): number {
-  return j && j.total ? Math.min(100, Math.floor((j.done / j.total) * 100)) : 0
+function pct(j?: { done?: number; total?: number } | null): number {
+  return j && j.total ? Math.min(100, Math.floor(((j.done ?? 0) / j.total) * 100)) : 0
 }
 
 /** One step of the setup: a big hanging number, then the content. It lives outside FirstRun so its fields keep what you typed. */
@@ -66,47 +59,28 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
   const [check, setCheck] = useState<Check | null>(null)
   const [picked, setPicked] = useState<string[] | null>(null)
   const [mode, setMode] = useState<'local' | 'hybrid' | 'ask'>('hybrid')
-  const [want, setWant] = useState<Set<string> | null>(null)
   const [busy, setBusy] = useState(false)
-  const [starting, setStarting] = useState(false)
   const [phase, setPhase] = useState<'setup' | 'ready'>('setup')
   const [settings, setSettings] = useState<Record<string, unknown>>({})
-  // Lite mode (PLAN2 P2-6): the hardware suggests a mode, the user may change it.
-  const [hw, setHw] = useState<{ suggested: 'full' | 'lite'; lite_model: string; hardware: { ram: number; vram: number; threads: number; gpu: string | null } } | null>(null)
-  const [perf, setPerf] = useState<'full' | 'lite' | null>(null)
+  // The device check and the features (PLAN4 section 5.3): Raven ticks what runs well, the user may change it.
+  const [fst, loadFeatures, setFst] = useFeatures()
+  const [choice, setChoice] = useState<Choice | null>(null)
+  const [testing, setTesting] = useState(false)
   useEffect(() => {
-    get<NonNullable<typeof hw>>('/lite').then((l) => {
-      setHw(l)
-      setPerf((p) => p ?? l.suggested)
-    }).catch(() => setPerf('full'))
-  }, [])
+    if (fst && !choice) setChoice(defaultChoice(fst))
+  }, [fst, choice])
 
   const load = (): void => void get<Check>('/setup/check').then(setCheck).catch(() => {})
   const loadSettings = (): void => void get<Record<string, unknown>>('/settings').then(setSettings).catch(() => {})
   useEffect(() => {
     load()
     loadSettings()
-    const off = on('models_progress', load)
-    const t = setInterval(load, 5000)
-    return () => (off(), clearInterval(t))
   }, [])
 
   const folders = places ? [{ label: 'Home', path: home }, ...places.folders] : []
   useEffect(() => {
     if (picked === null && places) setPicked(places.folders.filter((f) => SUGGESTED.includes(f.label)).map((f) => f.path))
   }, [places, picked])
-  useEffect(() => {
-    if (check && perf) {
-      const m = check.models
-      const missing = m.files.filter((f) => !f.present).map((f) => f.name)
-      // Lite: the static embedding model only. Full: everything except the static models.
-      setWant(
-        perf === 'lite'
-          ? new Set(missing.filter((n) => n === (hw?.lite_model ?? 'potion-base-8m')))
-          : new Set([...missing.filter((n) => !n.startsWith('potion')), ...m.ollama.filter((o) => !o.present).map((o) => `ollama:${o.name}`)])
-      )
-    }
-  }, [check, perf, hw])
 
   const sel = picked ?? []
   const toggle = (p: string): void =>
@@ -117,13 +91,14 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
       return p === home ? [home] : [...cur.filter((x) => x !== home), p]
     })
 
-  const startOllama = async (): Promise<void> => {
-    setStarting(true)
+  const bench = async (): Promise<void> => {
+    setTesting(true)
     try {
-      await window.raven?.startOllama()
+      await post('/device/bench')
+      await loadFeatures(true)
+      setChoice(null) // the speed test can change the advice
     } finally {
-      setStarting(false)
-      load()
+      setTesting(false)
     }
   }
 
@@ -131,13 +106,13 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
     setBusy(true)
     try {
       await post('/settings', { key: 'ai_mode', value: mode })
-      if (perf) await post('/lite/mode', { mode: perf })
       if (sel.length) await post('/index/roots', { roots: sel })
-      const names = [...(want ?? [])].filter((n) => !n.startsWith('ollama:') || check?.ollama.running)
-      if (names.length) await post('/models/download', { names })
+      if (choice) setFst(await post('/features/apply', choice))
       await post('/settings', { key: 'first_run_done', value: true })
       void refreshPrivacy()
       setPhase('ready')
+    } catch (e) {
+      say((e as Error).message, 'error')
     } finally {
       setBusy(false)
     }
@@ -147,67 +122,15 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
     await navigate(home)
   }
 
-  const m = check?.models
-  const allModels = m ? [...m.files.map((f) => ({ ...f, key: f.name })), ...m.ollama.map((o) => ({ ...o, key: `ollama:${o.name}` }))] : []
-  const missingTools = check?.tools.filter((t) => !t.ok) ?? []
-  const [copied, setCopied] = useState<string | null>(null)
-  const copy = (t: string): void => {
-    void navigator.clipboard.writeText(t).then(() => {
-      setCopied(t)
-      setTimeout(() => setCopied(null), 1600)
-    })
-  }
-  const Cmd = ({ text }: { text: string }) => (
-    <div className="mt-2 flex items-center gap-2 bg-console-bg px-3 py-2" style={{ borderRadius: 3 }}>
-      <code className="selectable mono flex-1 select-all overflow-x-auto whitespace-nowrap text-[12px] text-console-text">{text}</code>
-      <button className="flex items-center gap-1 px-2 py-0.5 text-[11px] text-console-text/80 transition-colors hover:text-console-text" onClick={() => copy(text)}>
-        {copied === text ? <Check size={12} /> : <Copy size={12} />}
-        {copied === text ? 'Copied' : 'Copy'}
-      </button>
-    </div>
-  )
-  const modelRow = (r: ModelRow & { key: string }, k: number) => {
-    const j = r.job
-    const needsOllama = r.key.startsWith('ollama:') && !check?.ollama.running
-    const on = r.present || (!!want?.has(r.key) && !needsOllama)
-    const running = j?.state === 'running'
-    return (
-      <label key={r.key} style={stagger(k)} className={`anim-row grid grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-3 border-b border-line/70 py-2.5 transition-colors ${needsOllama || r.present ? 'cursor-default' : 'cursor-pointer hover:bg-hover'}`}>
-        <input
-          type="checkbox"
-          disabled={r.present || needsOllama}
-          checked={on}
-          onChange={(e) =>
-            setWant((w) => {
-              const n = new Set(w ?? [])
-              if (e.target.checked) n.add(r.key)
-              else n.delete(r.key)
-              return n
-            })
-          }
-        />
-        <span className="min-w-0">
-          <span className="font-medium">{r.label}</span>
-          <span className="block truncate text-[12.5px] text-muted">{r.adds}</span>
-          {running && (
-            <span className="mt-1.5 block">
-              <Track pct={pct(j)} color="var(--accent)" />
-            </span>
-          )}
-        </span>
-        <State
-          ok={r.present ? true : j?.state === 'error' ? false : null}
-          text={r.present ? 'ready' : running ? `downloading ${pct(j)}%` : j?.state === 'error' ? 'failed' : j?.state === 'queued' ? 'waiting' : needsOllama ? 'needs Ollama' : size(r.mb * 1048576)}
-        />
-      </label>
-    )
-  }
+  const sizes = fst && choice ? choiceSize(fst, choice) : null
+  const needOllama = !!fst && !!sizes?.ollama && !fst.ollama.running
+  const modelRows = (fst?.features ?? []).filter((f) => f.kind === 'model' && (f.always || f.on))
 
   const wrapCls = 'flex h-full justify-center overflow-y-auto bg-bg'
 
   if (phase === 'ready') {
-    const pending = allModels.filter((r) => !r.present && r.job && r.job.state !== 'error')
-    const failed = allModels.filter((r) => r.job?.state === 'error')
+    const pending = modelRows.filter((f) => f.state === 'downloading' || f.state === 'missing' || f.state === 'needs_ollama')
+    const failed = modelRows.filter((f) => f.state === 'error')
     const indexDone = !!index && index.roots.length > 0 && index.text_pending === 0 && index.embed_pending === 0 && !(index.visual_pending ?? 0) && index.stage !== 'metadata'
     const row = (label: string, ok: boolean | null, text: string, k: number, bar?: number) => (
       <div key={label} style={stagger(k)} className="anim-row grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-3 border-b border-line/70 py-3">
@@ -234,15 +157,18 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
 
           <div className="mb-4 border-t border-line">
             {row(`Raven core ${check?.core.version ?? ''}`, true, 'running', 0)}
-            {row('Ollama, for the local AI models', check?.ollama.running ?? null, check?.ollama.running ? 'running' : 'not running · AI features wait', 1)}
+            {row('Ollama, for the local AI models', fst?.ollama.running ?? null, fst?.ollama.running ? 'running' : fst?.ollama.job?.state === 'running' ? 'installing' : 'not running · AI features wait', 1)}
             {row(`Index of ${sel.map((p) => tildify(p, home)).join(', ') || 'no folder'}`, indexDone ? true : null, indexDone ? indexText(index) : indexText(index).toLowerCase(), 2)}
-            {allModels.map((r, k) =>
-              row(r.label, r.present ? true : r.job?.state === 'error' ? false : null, r.present ? 'ready' : r.job?.state === 'running' ? `downloading ${pct(r.job)}%` : r.job?.state === 'error' ? `failed: ${r.job.error ?? ''}`.slice(0, 40) : r.job ? 'waiting' : 'not downloaded', k + 3, pct(r.job))
-            )}
+            {modelRows.map((f, k) => {
+              const ok = f.state === 'ready' ? true : f.state === 'error' ? false : null
+              const text = f.state === 'ready' ? 'ready' : f.state === 'downloading' ? `downloading ${pct(f.job)}%` : f.state === 'error' ? `failed: ${f.job?.error ?? ''}`.slice(0, 40) : f.state === 'needs_ollama' ? 'waits for Ollama' : 'waiting'
+              return row(f.label, ok, text, k + 3, f.state === 'downloading' ? pct(f.job) : undefined)
+            })}
           </div>
+          {fst && !fst.ollama.running && modelRows.some((f) => f.state === 'needs_ollama') && <OllamaSetup status={fst.ollama} onChange={() => void loadFeatures()} />}
           {failed.length > 0 && (
             <p className="mb-4 border-l-2 border-danger py-1 pl-3 text-danger">
-              {failed.length} download{failed.length === 1 ? '' : 's'} failed. Check the network, then download again in Settings, Models.
+              {failed.length} download{failed.length === 1 ? '' : 's'} failed. Check the network, then retry in Settings, Features and models.
             </p>
           )}
           <div className="flex items-center gap-5">
@@ -271,13 +197,16 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
 
         </div>
 
-        <Step n={1} k={5} title="System check">
-          <div className="-mt-3 mb-2 flex justify-end">
-            <Ghost tone="plain" onClick={load}>
+        <Step n={1} k={5} title="This computer" text="Raven checked what this computer can run, and ticked what runs well. You can change it now or later in Settings.">
+          <div className="-mt-3 mb-2 flex justify-end gap-5">
+            <Ghost tone="plain" disabled={testing} onClick={() => void bench()} title="A CPU test of about 1 s. It makes the advice more exact.">
+              {testing ? 'Testing…' : fst?.device.bench ? `Speed ${fst.device.bench} GFLOPS · test again` : 'Test the speed'}
+            </Ghost>
+            <Ghost tone="plain" onClick={() => void loadFeatures(true)}>
               Check again
             </Ghost>
           </div>
-          {!check && (
+          {!fst && (
             <div className="flex items-center gap-3 text-muted">
               <span className="relative h-px w-24 overflow-hidden bg-line">
                 <span className="absolute inset-y-0 w-1/3 bg-accent" style={{ animation: 'rv-scan 1s ease-in-out infinite' }} />
@@ -285,77 +214,20 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
               checking this computer…
             </div>
           )}
-          {check && (
+          {fst && choice && (
             <>
-              <div className="border-t border-line">
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line/70 py-2.5">
-                  <span>
-                    Raven core <span className="text-muted">· {check.core.version} · data in {tildify(check.core.data_dir, home)}</span>
-                  </span>
-                  <State ok text="running" />
-                </div>
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line/70 py-2.5">
-                  <span>
-                    Ollama <span className="text-muted">· local AI</span>
-                  </span>
-                  <State ok={check.ollama.running} text={check.ollama.running ? 'running' : check.ollama.installed ? 'not running' : 'not installed'} />
-                </div>
+              <div className="mb-3">
+                <DeviceLine d={fst.device} />
               </div>
-              {!check.ollama.running && (
-                <div className="anim-pop mt-3 border-l-2 border-danger py-1 pl-4">
-                  {check.ollama.installed ? (
-                    <span className="flex items-center gap-4">
-                      Ollama is installed but does not run.
-                      <Ghost disabled={starting} onClick={() => void startOllama()}>
-                        {starting ? 'Starting…' : 'Start Ollama'}
-                      </Ghost>
-                    </span>
-                  ) : (
-                    <>
-                      <p>Install Ollama, then Check again (3 GB of models).</p>
-                      <Cmd text={check.ollama.install} />
-                    </>
-                  )}
-                  <p className="mt-2 text-[12.5px] text-muted">Without it: browse, find, Space.</p>
-                </div>
-              )}
-
-              <div className="label mb-1 mt-4">Mode</div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Seg options={[['full', 'Full'], ['lite', 'Lite']]} value={perf ?? 'full'} onChange={(v) => setPerf(v)} />
-                {hw && (
-                  <span className="mono text-[11px] text-muted">
-                    {Math.round(hw.hardware.ram / 1073741824)} GB RAM · {hw.hardware.gpu ? `${Math.round(hw.hardware.vram / 1073741824)} GB GPU` : 'no GPU'} · {hw.hardware.threads} threads · suggested: {hw.suggested}
-                  </span>
-                )}
+              {needOllama && <OllamaSetup status={fst.ollama} onChange={() => void loadFeatures()} />}
+              <FeaturePicker st={fst} mode="pick" choice={choice} onChoice={setChoice} />
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 text-[12.5px] text-muted">
+                <span>
+                  <span className="mono text-text">{size(sizes?.download ?? 0)}</span> to download
+                </span>
+                <span>{size(fst.device.disk.free)} free on this disk</span>
+                {needOllama && <span>The Ollama models download after Ollama runs.</span>}
               </div>
-              <div className="label mb-1 mt-4">Models</div>
-              
-              <div className="border-t border-line">{allModels.map((r, k) => modelRow(r, k))}</div>
-
-              <div className="label mb-2 mt-7">
-                Optional tools · {check.tools.length - missingTools.length} of {check.tools.length} found
-              </div>
-              {missingTools.length === 0 ? (
-                <p className="text-[12.5px] text-muted">Every optional tool is installed.</p>
-              ) : (
-                <>
-                  <div>
-                    {missingTools.map((t) => (
-                      <div key={t.name} className="grid grid-cols-[110px_minmax(0,1fr)] gap-3 border-b border-line/60 py-1.5 text-[12.5px]">
-                        <span className="mono text-accent">{t.name}</span>
-                        <span className="text-muted">{t.adds}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {check.install_all && (
-                    <div className="mt-3">
-                      <span className="text-[12.5px] text-muted">Install all of them:</span>
-                      <Cmd text={check.install_all} />
-                    </div>
-                  )}
-                </>
-              )}
             </>
           )}
         </Step>
@@ -430,8 +302,13 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
             <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-y-4">
               <KeyField provider="groq" setting="groq_api_key" label="Groq API key" placeholder="gsk_… (free at console.groq.com)" stored={settings.groq_api_key as string} onSaved={loadSettings} />
               <KeyField provider="anthropic" setting="anthropic_api_key" label="Anthropic API key" placeholder="sk-ant-… (console.anthropic.com)" stored={settings.anthropic_api_key as string} onSaved={loadSettings} />
-              <span className="text-muted">Claude Code</span>
-              {check?.cloud.claude ? <ClaudeAccount /> : <span className="mono text-[11px] text-muted">not installed (optional)</span>}
+              {/* claude -p uses the claude.ai login: development builds only (PLAN4 B1). */}
+              {check?.core.dev && check.cloud.claude && (
+                <>
+                  <span className="text-muted">claude -p (dev)</span>
+                  <ClaudeAccount />
+                </>
+              )}
             </div>
           </Step>
         )}
