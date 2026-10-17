@@ -150,3 +150,14 @@ def test_real_model_reads_long_text_in_windows_and_keeps_lines_apart():
     assert any(text[s.start:s.end].endswith("Siddiqui") for s in m.detect(text))
     for s in m.detect("Rahul Sharma\nPriya Nair"):
         assert "\n" not in "Rahul Sharma\nPriya Nair"[s.start:s.end]
+
+
+def test_an_id_label_word_is_not_a_name(monkeypatch):
+    from raven_core.privacy.rules import Span
+
+    text = "Priya Nair, Aadhaar 2341 2341 2346"
+    monkeypatch.setattr(gate.layer2, "available", lambda: True)
+    monkeypatch.setattr(gate.layer2, "detect", lambda t: [Span("PERSON", 0, 10, 0.9, 2), Span("PERSON", 12, 19, 0.7, 2)])
+    monkeypatch.setattr(gate, "strict_on", lambda: False)
+    out = gate.Redactor().redact(text)
+    assert out == "[PERSON_1], Aadhaar [AADHAAR_1]"

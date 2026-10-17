@@ -32,6 +32,10 @@ from .rules import HIGH_RISK, Span, custom_spans, detect, resolve
 PLACEHOLDER = re.compile(r"\[([A-Z]+)_(\d+)\]")
 NAME_TYPES = {"PERSON", "EMAIL", "PHONE", "ADDRESS", "SECRET"}
 REPEAT_TYPES = {"PERSON", "ADDRESS"}  # a value of these types is hidden in every place once a model finds it
+# The label words of ID types. The Privacy Filter can read "Aadhaar" before a number as a name. Layer 1 finds the
+# number itself, so a name span that is only one of these words is dropped.
+LABEL_WORDS = {"aadhaar", "aadhar", "pan", "vid", "upi", "ifsc", "gstin", "uan", "abha", "passport", "voter",
+               "iban", "cvv", "otp", "pin", "ssn"}
 NOT_READY = "The Privacy Filter is not ready, so nothing goes to the cloud. Use the local model, or wait."
 NOT_INSTALLED = ("The Privacy Filter is not installed, so nothing goes to the cloud. "
                  "Add it in Settings, Features and models, or use the local model.")
@@ -156,6 +160,8 @@ class Redactor:
         if self.use_layer2 and strict_on() and not (cached_layer2 and name):
             # The index stores Privacy Filter spans only, so the strict model also runs on text with cached spans.
             spans += self._strict(strict.detect(prep), name)
+        spans = [x for x in spans if not (x.type == "PERSON" and x.layer == 2
+                                          and text[x.start:x.end].strip(" .,:").lower() in LABEL_WORDS)]
         spans += self._repeats(text, spans)
         spans = resolve([s for s in spans if s.end <= len(text)])
         out, last = [], 0
