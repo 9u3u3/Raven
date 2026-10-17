@@ -159,7 +159,7 @@ def _ask(question: str, think: bool, consent: bool, history: list[dict], local_o
     want_cloud = think or bool(SYNTH.search(question))
     k, budget = (CLOUD_K, CLOUD_BUDGET) if want_cloud else (LOCAL_K, LOCAL_BUDGET)
     if want_cloud and providers and mode != "local":
-        gate.layer2.warm_in_background()  # PLAN4 B7: the model loads while the search runs
+        gate.warm_in_background()  # PLAN4 B7: the models load while the search runs
     sources, info = retrieve(_retrieval_query(question, history), k=k, budget=budget)
     retrieve_ms = round((time.perf_counter() - t0) * 1000)
 

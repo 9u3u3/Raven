@@ -1,0 +1,17 @@
+[
+ {"text": "Spoke to priya nair yesterday about the lease. She said Arjun will sign on Monday.", "vals": {"PERSON": ["priya nair", "Arjun"]}},
+ {"text": "Forwarding the CV of Mohammed Irfan Siddiqui for the backend role.", "vals": {"PERSON": ["Mohammed Irfan Siddiqui"]}},
+ {"text": "Thanks, Dr. Venkataraman, for the second opinion on my father's MRI.", "vals": {"PERSON": ["Venkataraman"]}},
+ {"text": "From: Sneha Kulkarni <sneha.k@outlook.com>\nTo: HR team\nSubject: leave on 14 Nov", "vals": {"PERSON": ["Sneha Kulkarni"], "EMAIL": ["sneha.k@outlook.com"]}},
+ {"text": "Meeting notes, attendees: R. Iyer, Kavya Menon, Tom Fischer, and Li Wei.", "vals": {"PERSON": ["Kavya Menon", "Tom Fischer", "Li Wei"]}},
+ {"text": "Gurpreet ne bola ki kal Harleen ke ghar party hai.", "vals": {"PERSON": ["Gurpreet", "Harleen"]}},
+ {"text": "राहुल वर्मा ने आज फ़ोन किया था।", "vals": {"PERSON": ["राहुल वर्मा"]}},
+ {"text": "Ship to: 42, 3rd Cross, Indiranagar 2nd Stage, Bengaluru, Karnataka 560038", "vals": {"ADDRESS": ["42, 3rd Cross, Indiranagar 2nd Stage, Bengaluru"]}},
+ {"text": "Our new place is B-1204 Lodha Splendora, Ghodbunder Road, Thane West.", "vals": {"ADDRESS": ["B-1204 Lodha Splendora, Ghodbunder Road, Thane West"]}},
+ {"text": "House no. 17, Sector 21C, Faridabad is where the parcel went.", "vals": {"ADDRESS": ["House no. 17, Sector 21C, Faridabad"]}},
+ {"text": "Please send the documents to 1600 Amphitheatre Parkway, Mountain View, CA.", "vals": {"ADDRESS": ["1600 Amphitheatre Parkway, Mountain View"]}},
+ {"text": "near Shivaji Chowk, opp. SBI ATM, Kothrud, Pune", "vals": {"ADDRESS": ["Shivaji Chowk, opp. SBI ATM, Kothrud, Pune"]}},
+ {"text": "She was born on 3rd March 1991 in Nagpur.", "vals": {"DOB": ["3rd March 1991"]}},
+ {"text": "The patient reports chest pain and was started on metformin for diabetes.", "vals": {"HEALTH": ["diabetes"]}},
+ {"text": "Ananya's blood test shows low vitamin D and anaemia.", "vals": {"PERSON": ["Ananya"], "HEALTH": ["anaemia"]}}
+]

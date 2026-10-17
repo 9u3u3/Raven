@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from .. import config, db
+from .. import config, db, lite
 from ..privacy import gate
 from ..privacy.model import model as layer2
 from . import cloud, local
@@ -47,6 +47,9 @@ def status():
         "local_model": local.LLM,
         "local_ready": local.available(),
         "layer2": {"available": layer2.available(), "error": layer2.error, "load_ms": layer2.load_ms},
+        # Strict mode (PLAN4 7.3): the second model. "on" needs the switch and the model files.
+        "strict": {"switch": lite.enabled("pii_strict"), "available": gate.strict.available(), "on": gate.strict_on(),
+                   "error": gate.strict.error},
         # Fail closed (PLAN4 7.5): without the Privacy Filter nothing goes to the cloud. None means ready.
         "cloud_blocked": gate.layer2_ready(),
         "words": len(gate.custom_words()),

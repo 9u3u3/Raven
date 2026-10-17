@@ -208,6 +208,8 @@ export type PrivacyStatus = {
   local_model: string
   local_ready: boolean
   layer2: { available: boolean; error: string | null; load_ms: number | null }
+  /** Strict privacy (PLAN4 7.3): the second model. on = the switch is on and the model is installed. */
+  strict?: { switch: boolean; available: boolean; on: boolean; error: string | null }
   /** Fail closed (PLAN4 7.5): why nothing goes to the cloud now, or null. */
   cloud_blocked?: string | null
   /** The number of custom words to always hide (PLAN4 7.4). */

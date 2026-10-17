@@ -40,6 +40,12 @@ CATALOG: dict[str, dict] = {
         "repo": "openai/privacy-filter",
         "files": ["config.json", "tokenizer.json", "tokenizer_config.json", "viterbi_calibration.json", "onnx/model_q4.onnx", "onnx/model_q4.onnx_data"],
     },
+    # Strict privacy (PLAN4 7.3): GLiNER PII, quint8 ONNX, Apache-2.0.
+    "gliner-pii": {
+        "label": "GLiNER PII (quint8)", "adds": "Strict privacy: finds the names and addresses that the Privacy Filter misses", "mb": 205,
+        "repo": "knowledgator/gliner-pii-base-v1.0",
+        "files": ["gliner_config.json", "tokenizer.json", "onnx/model_quint8.onnx"],
+    },
     # Lite mode (PLAN2 P2-6): static embeddings on the CPU, no Ollama. One table lookup per token.
     "potion-retrieval-32m": {
         "label": "Potion retrieval (static)", "adds": "Search by meaning without Ollama (lite mode)", "mb": 128,

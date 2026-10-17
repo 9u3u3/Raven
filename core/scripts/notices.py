@@ -42,6 +42,7 @@ MODELS = [
     {"name": "MiniLM L-6 cross-encoder (ms-marco)", "source": "https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2", "license": "Apache-2.0"},
     {"name": "Whisper base (faster-whisper)", "source": "https://huggingface.co/Systran/faster-whisper-base", "license": "MIT"},
     {"name": "Privacy Filter", "source": "https://huggingface.co/openai/privacy-filter", "license": "Apache-2.0"},
+    {"name": "GLiNER PII base v1.0", "source": "https://huggingface.co/knowledgator/gliner-pii-base-v1.0", "license": "Apache-2.0"},
     {"name": "Potion retrieval 32M, Potion base 8M", "source": "https://huggingface.co/minishlab", "license": "MIT"},
 ]
 PROGRAMS = [

@@ -62,6 +62,10 @@ CATALOG: list[dict] = [
     {"id": "privacy", "label": "Privacy Filter", "adds": "Finds names, addresses and accounts before any cloud call. Cloud AI needs it.",
      "kind": "model", "switch": "pii_index", "models": ["privacy-filter"], "ram_use": 1.5, "ram_good": 8, "ram_min": 6,
      "threads_good": 4},
+    {"id": "strict", "label": "Strict privacy", "adds": "A second model finds the names, addresses and health words that the "
+     "Privacy Filter misses, before any cloud call. Cloud calls take about 1.5 s more for each 1,000 words.",
+     "kind": "model", "switch": "pii_strict", "models": ["gliner-pii"], "needs": ["privacy"], "ram_use": 0.9, "ram_good": 8,
+     "ram_min": 6, "threads_good": 4},
     {"id": "galaxy", "label": "File map by meaning", "adds": "A map of your files in groups of the same topic.",
      "kind": "model", "switch": "galaxy", "models": [], "needs": ["meaning"], "ram_use": 0.5, "ram_good": 8, "ram_min": 4},
     {"id": "ocr", "label": "Read scans", "adds": "Read the text in scans and screenshots (OCR).", "kind": "tool", "tools": ["tesseract"]},

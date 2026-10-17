@@ -4,7 +4,8 @@ Steps for every cloud payload:
  1. The caller builds the minimum payload.
  2. Cached spans from index time apply first (fast).
  3. Layer 1 runs again on the whole payload.
- 4. Layer 2 runs on text that has no cached spans.
+ 4. Layer 2 runs on text that has no cached spans. Strict mode (PLAN4 7.3) adds a second model, GLiNER, on all
+    text. A name or an address that a model finds once is hidden in every place it stands in the request.
  5. Each entity becomes a typed placeholder: [PERSON_1], [ACCOUNT_1]. The map stays in memory.
  6. Final check: layer 1 scans the redacted payload. A high-risk entity left means block.
     seal() runs the check and gives a Sealed payload. A provider adapter takes only a Sealed payload (PLAN4 4).
@@ -12,7 +13,8 @@ Steps for every cloud payload:
  8. The router sends it.
  9. restore() puts the original values back into the answer, locally.
 
-Fail closed (PLAN4 7.5): without a working Privacy Filter, seal() refuses, and the local model answers.
+Fail closed (PLAN4 7.5): without a working Privacy Filter, seal() refuses, and the local model answers. The same
+applies to the strict model when Strict mode is on and the model is installed.
 """
 
 from __future__ import annotations
@@ -22,15 +24,19 @@ import re
 import time
 from dataclasses import dataclass, field
 
-from .. import db, events
+from .. import db, events, lite
+from .gliner import model as strict
 from .model import model as layer2
 from .rules import HIGH_RISK, Span, custom_spans, detect, resolve
 
 PLACEHOLDER = re.compile(r"\[([A-Z]+)_(\d+)\]")
 NAME_TYPES = {"PERSON", "EMAIL", "PHONE", "ADDRESS", "SECRET"}
+REPEAT_TYPES = {"PERSON", "ADDRESS"}  # a value of these types is hidden in every place once a model finds it
 NOT_READY = "The Privacy Filter is not ready, so nothing goes to the cloud. Use the local model, or wait."
 NOT_INSTALLED = ("The Privacy Filter is not installed, so nothing goes to the cloud. "
                  "Add it in Settings, Features and models, or use the local model.")
+STRICT_NOT_READY = ("Strict privacy is on, but its model did not load, so nothing goes to the cloud. "
+                    "Turn Strict privacy off in Settings, Features and models, or use the local model.")
 
 
 class Blocked(Exception):
@@ -58,13 +64,35 @@ def forget_words_cache() -> None:
     _words["at"] = 0.0
 
 
+def strict_on() -> bool:
+    """Strict mode runs when its switch is on and its model is installed (PLAN4 7.3)."""
+    return lite.enabled("pii_strict") and strict.available()
+
+
 def layer2_ready() -> str | None:
-    """None when the Privacy Filter can run, else the reason it cannot."""
+    """None when the Privacy Filter (and the strict model, in Strict mode) can run, else the reason it cannot."""
     if not layer2.available():
         return NOT_INSTALLED
     if layer2.error:
         return NOT_READY
+    if strict_on() and strict.error:
+        return STRICT_NOT_READY
     return None
+
+
+def warm() -> None:
+    """Load the layer-2 models now (PLAN4 B7)."""
+    layer2.warm()
+    if strict_on():
+        strict.warm()
+
+
+def warm_in_background() -> None:
+    layer2.warm_in_background()
+    if strict_on() and strict._sess is None:
+        import threading
+
+        threading.Thread(target=strict.warm, name="strict-warm", daemon=True).start()
 
 
 @dataclass
@@ -92,6 +120,9 @@ class Redactor:
         self.entities: list[dict] = []
         self.use_layer2 = use_layer2
         self.layer2_state = "off"
+        self.strict_state = "off"
+        self.known: dict[str, str] = {}  # a found name or address (lower case) -> its type, for the repeat rule
+        self.parts: set[str] = set()  # the parts of a found full name: "Irfan" of "Mohammed Irfan Siddiqui"
 
     def _placeholder(self, typ: str, value: str) -> str:
         key = (typ, value.strip().lower())
@@ -110,20 +141,22 @@ class Redactor:
         spans = list(cached or [])
         spans += detect(text)
         spans += custom_spans(text, custom_words())
+        # The model reads "Rahul_Sharma_resume.txt" as a URL and misses lowercase names. A title-case copy with
+        # spaces for _ - . reads as words. It has the same length, so the offsets stay valid.
+        prep = re.sub(r"[_\-.]", " ", text).title() if name else text
         if self.use_layer2 and not cached_layer2:
             if layer2.available():
+                found = layer2.detect(prep)
                 if name:
-                    # The model reads "Rahul_Sharma_resume.txt" as a URL and misses lowercase names.
-                    # A title-case copy with spaces for _ - . reads as words. It has the same length,
-                    # so the offsets stay valid.
-                    found = layer2.detect(re.sub(r"[_\-.]", " ", text).title())
                     found = [s for s in found if s.type in NAME_TYPES and s.end - s.start >= 3]
-                else:
-                    found = layer2.detect(text)
                 self.layer2_state = "on" if layer2.error is None else "error"
                 spans += found
             else:
                 self.layer2_state = "missing"
+        if self.use_layer2 and strict_on() and not (cached_layer2 and name):
+            # The index stores Privacy Filter spans only, so the strict model also runs on text with cached spans.
+            spans += self._strict(strict.detect(prep), name)
+        spans += self._repeats(text, spans)
         spans = resolve([s for s in spans if s.end <= len(text)])
         out, last = [], 0
         for s in spans:
@@ -134,6 +167,38 @@ class Redactor:
             last = s.end
         out.append(text[last:])
         return "".join(out)
+
+    def _strict(self, found: list[Span], name: bool) -> list[Span]:
+        self.strict_state = "on" if strict.error is None else "error"
+        return [s for s in found if s.end - s.start >= 3] if name else found
+
+    def _repeats(self, text: str, spans: list[Span]) -> list[Span]:
+        """A model can find a name in one place and miss it in the next (PLAN4 7.3). Hide each name or address
+        that a model found, in this text or before in the same request, in every place it stands. In a file
+        name, "Rahul Sharma" also matches rahul_sharma and rahul-sharma.
+
+        A text often names a person in full once, then by one part. Each part of a found full name with 4 letters
+        or more is hidden too, but only where it starts with a capital letter, so "Rose" hides and "rose" stays."""
+        for s in spans:
+            if s.type in REPEAT_TYPES and s.layer == 2:
+                v = text[s.start:s.end].strip()
+                if len(v) >= 3:
+                    self.known.setdefault(v.lower(), s.type)
+                if s.type == "PERSON":
+                    words = re.findall(r"[^\W\d_]{4,}", v)
+                    if len(words) >= 2:
+                        self.parts.update(w[0].upper() + w[1:].lower() for w in words)
+        out = []
+        for p in self.parts:
+            pat = re.compile(r"(?<![^\W_])" + re.escape(p) + r"(?![^\W_])")
+            out += [Span("PERSON", m.start(), m.end(), 0.8, 2) for m in pat.finditer(text)]
+        for v, typ in self.known.items():
+            words = [re.escape(w) for w in re.split(r"[\s_\-.,]+", v) if w]
+            if not words:
+                continue
+            pat = re.compile(r"(?<![^\W_])" + r"[\s_\-.,]+".join(words) + r"(?![^\W_])", re.IGNORECASE)
+            out += [Span(typ, m.start(), m.end(), 0.9, 2) for m in pat.finditer(text)]
+        return out
 
     def redact_names(self, names: list[str]) -> list[str]:
         """Redact many file or folder names with one layer-2 call (PLAN4 B7: one call per name took 690 ms for
@@ -152,6 +217,8 @@ class Redactor:
                 prep.append(t if len(t) == len(n) else re.sub(r"\n", " ", n))
             found = [s for s in layer2.detect("\n".join(prep)) if s.type in NAME_TYPES and s.end - s.start >= 3]
             self.layer2_state = "on" if layer2.error is None else "error"
+            if strict_on():
+                found += self._strict(strict.detect("\n".join(prep)), True)
         out, off = [], 0
         for n in names:
             end = off + len(n)
@@ -196,6 +263,8 @@ def seal(payload: str, red: Redactor | None) -> Sealed:
         why = layer2_ready()
         if why is None and red.layer2_state in ("missing", "error"):
             why = NOT_READY
+        if why is None and red.strict_state == "error":
+            why = STRICT_NOT_READY
         if why:
             raise Blocked(why)
     blocked, why = final_check(payload)

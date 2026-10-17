@@ -27,6 +27,8 @@ FEATURES = {  # name: (label, on in full, on in lite)
     "image": ("Find photos by what they show", True, False),
     "speech": ("Search what people say", True, False),
     "pii_index": ("Privacy Filter while indexing", True, False),
+    # Runs only on cloud payloads, so lite mode keeps it on. It needs its model (features.py "strict").
+    "pii_strict": ("Strict privacy: a second model before each cloud call", True, True),
     "galaxy": ("File map by meaning", True, False),
 }
 LITE_EMBED = "potion-retrieval-32m"

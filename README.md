@@ -88,7 +88,10 @@ See [Run it (development)](#run-it-development) for the optional tools and the t
   byte that leaves the laptop. The patterns cover India's IDs (Aadhaar, VID, PAN, GSTIN, passport, voter ID, driving
   licence, UAN, ABHA, ration card) and the types that apply everywhere (cards with CVV and expiry, IBAN, crypto
   wallets, health records, secrets, OTPs). A column header in a table also marks the values below it.
-- Fail closed: without the Privacy Filter, nothing goes to the cloud. Photos, videos and audio never go to the cloud.
+- Strict privacy: a second model (GLiNER PII, 197 MB) finds the names, addresses and health words that the Privacy
+  Filter misses. On a hand-written test set, names go from 50 % to 92 % and addresses from 40 % to 100 %. A name
+  that a model finds once is hidden in every place of the request, and so is each part of a full name.
+- Fail closed: without the Privacy Filter (or the strict model, when Strict privacy is on), nothing goes to the cloud. Photos, videos and audio never go to the cloud.
 - Words to always hide: family names, a company, a client. Private folders: no AI and no model reads them.
 - Cloud providers: Anthropic, OpenAI, Groq, OpenRouter, Google Gemini, or any OpenAI-compatible server. Groq,
   Gemini and OpenRouter have free plans. Raven tries them in your order.
@@ -137,6 +140,7 @@ plan expects.
 | Folder search | 65 ms | 300 ms |
 | Search by appearance (SigLIP 2, CPU) | 25 ms | 300 ms |
 | Redaction of new text (both layers, CPU, model loaded) | 53 ms | 50 ms (the budget is for cached spans) |
+| Redaction with Strict privacy (3 models, 40 words, loaded) | 96 ms | 1.4 s more for each 1,000 words |
 | Redaction, first call after the model unloads | 0.8 s | the model loads while Ask searches |
 | Ask, first word (local qwen3:4b) | 2.5 s | 1 s, missed: the GPU state above |
 
@@ -314,7 +318,9 @@ The sidecar keeps its database, caches and models in `~/.local/share/raven` (Win
 - "Remember on this computer" for the encrypted index needs a system keyring. Without one, Raven asks for the
   passphrase at each start.
 - The redaction patterns cover India and the types that apply in all countries. Other countries come later.
-  The recall numbers come from a synthetic set, so real recall on addresses is probably lower.
+  The synthetic set gives 100 % for each type, but it uses fixed forms. The hand-written set
+  (`core/scripts/pii_hard.json`) has only 15 texts. With Strict privacy, it still misses one name in 12
+  ("Harleen" in Hinglish text), and no model finds a name in Devanagari script.
 - Nobody has tested the provider adapters against the real Anthropic, OpenAI, Groq, OpenRouter or Gemini APIs
   yet. The tests use fake servers.
 - The MCP client buttons are tested on Linux only.

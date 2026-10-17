@@ -70,18 +70,21 @@ function Stat({ value, label, fmt }: { value: number; label: string; fmt?: (n: n
 function Ready({ p }: { p: PrivacyStatus }) {
   const ready = Object.entries(p.providers).filter(([, on]) => on).map(([id]) => p.provider_names?.[id] ?? id)
   const cloud = ready.length > 0
-  const rows: [boolean, string, string][] = [
+  // null: a choice, not a problem (Strict privacy that is off or not installed).
+  const s = p.strict
+  const rows: [boolean | null, string, string][] = [
     [p.local_ready, 'Local model', p.local_ready ? p.local_model : `run: ollama pull ${p.local_model}`],
     [!p.layer2.error && p.layer2.available, 'Privacy Filter', p.layer2.error ?? (p.layer2.available ? 'PII layer 2 on the CPU' : 'not installed: nothing goes to the cloud')],
+    [s?.on ? !s.error : null, 'Strict privacy', s?.on ? (s.error ? 'did not load: nothing goes to the cloud' : 'a second model checks names and addresses') : s?.available ? 'off: turn it on in Settings, Features and models' : 'not installed: add it in Settings, Features and models'],
     [cloud, 'Cloud model', cloud ? ready.join(', ') : 'none: add a provider in Settings, AI providers']
   ]
   return (
     <div className="divide-y divide-line">
       {rows.map(([ok, name, detail]) => (
         <div key={name} className="flex items-center gap-3 py-2 text-[12.5px]">
-          <span className={`h-[7px] w-[7px] ${ok ? 'bg-ok' : 'bg-danger'}`} />
+          <span className={`h-[7px] w-[7px] ${ok === null ? 'bg-line' : ok ? 'bg-ok' : 'bg-danger'}`} />
           <span className="w-32 shrink-0 whitespace-nowrap">{name}</span>
-          <span className={`mono truncate text-[11.5px] ${ok ? 'text-muted' : 'text-danger'}`}>{detail}</span>
+          <span className={`mono truncate text-[11.5px] ${ok === false ? 'text-danger' : 'text-muted'}`}>{detail}</span>
         </div>
       ))}
       {p.online === false && <div className="py-2 text-[12px] text-accent">Offline: Raven answers on this computer only.</div>}

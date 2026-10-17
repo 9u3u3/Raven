@@ -162,7 +162,7 @@ def _run(task: str, path: str, think_harder: bool = False, consent: bool = False
         tier, reason = "T2", "no cloud provider is set up" if cloud.online() else "this computer is offline, so the local model answers"
 
     if tier == "T3":
-        gate.layer2.warm()  # PLAN4 B7: load the model before the many short name checks
+        gate.warm()  # PLAN4 B7: load the models before the many short name checks
         red = gate.Redactor()
         payload, n = build_folder_payload(path, red)
         try:
