@@ -1,7 +1,7 @@
 import { AlertCircle, Check, Lightbulb, PenLine } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { get, post } from '../lib/api'
-import { tildify } from '../lib/format'
+import { expandPath, tildify } from '../lib/format'
 import type { Journal } from '../lib/types'
 import { navigate, reload, say, useApp } from '../store'
 import { FileIcon } from '../components/FileIcon'
@@ -552,7 +552,7 @@ function MapView() {
   const [typed, setTyped] = useState(lastMapped ? tildify(lastMapped, home) : '')
   const [path, setPath] = useState(lastMapped)
   const map = (p: string): void => {
-    const full = p.trim().replace(/^~(?=\/|$)/, home).replace(/\/+$/, '') || '/'
+    const full = expandPath(p, home) || '/'
     if (!p.trim()) return
     lastMapped = full
     setPath(full)

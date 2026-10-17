@@ -140,7 +140,7 @@ export function useVisualFind(q: string, enabled: boolean, limit = 24): { q: str
 }
 
 /** A query that names a place: a path, a home path or a server address. */
-export const PATHLIKE = /^(~|\/|\\\\|[a-z]+:\/\/)/i
+export const PATHLIKE = /^(~|\/|\\\\|[a-z]+:\/\/|[a-z]:[\\/])/i
 
 const FOLDER_DEBOUNCE = 120
 

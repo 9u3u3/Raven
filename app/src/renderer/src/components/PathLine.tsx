@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Eye, EyeOff, LayoutGrid, List, PanelLeft, PanelRight, RotateCw } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { dragOver, dropInto } from '../lib/dnd'
-import { expandPath, tildify } from '../lib/format'
+import { expandPath, isRoot, isWinPath, sep, tildify } from '../lib/format'
 import { PATHLIKE, useFolderFind } from '../lib/search'
 import type { FolderHit } from '../lib/types'
 import { back, forward, navigate, networkPlace, openConnect, reload, setPref, up, useApp } from '../store'
@@ -74,7 +74,7 @@ function PathEditor({ initial, home }: { initial: string; home: string }) {
             // Tab completes the path, like a shell.
             e.preventDefault()
             const h = hits[Math.max(active, 0)]
-            setText(tildify(h.path, home) + '/')
+            setText(tildify(h.path, home) + sep(h.path))
             setTyped(true)
           }
           e.stopPropagation()
@@ -98,6 +98,7 @@ function PathEditor({ initial, home }: { initial: string; home: string }) {
 export default function PathLine() {
   const path = useApp((s) => s.path)
   const home = useApp((s) => s.places?.home ?? '')
+  const drives = useApp((s) => s.places?.drives)
   const editing = useApp((s) => s.editPath)
   const histIdx = useApp((s) => s.histIdx)
   const histLen = useApp((s) => s.history.length)
@@ -105,9 +106,12 @@ export default function PathLine() {
   const inspector = useApp((s) => s.inspector)
   const showHidden = useApp((s) => s.showHidden)
   const leftOpen = useApp((s) => s.leftOpen)
+  // The crumbs start at the top of the system, like the system file manager: / on Linux and macOS,
+  // the drive on Windows ("Local Disk (C:)" > Users > x, as in File Explorer).
   const crumbs: { label: string; path: string }[] = []
-  const shown = tildify(path, home)
+  const win = isWinPath(path)
   const share = networkPlace(path)
+  const unc = /^\/\/[^/]+\/[^/]+/.exec(path)
   if (share) {
     // A network share starts at its own name, not at /run/user/<uid>/gvfs/<mount name>.
     crumbs.push({ label: share.label, path: share.path })
@@ -116,11 +120,21 @@ export default function PathLine() {
       cur = `${cur}/${part}`
       crumbs.push({ label: part, path: cur })
     }
-  } else if (shown.startsWith('~')) {
-    crumbs.push({ label: '~', path: home })
-    let cur = home
-    for (const part of shown.slice(2).split('/').filter(Boolean)) {
+  } else if (unc) {
+    // A Windows share starts at \\host\share.
+    crumbs.push({ label: unc[0].replace(/\//g, '\\'), path: unc[0] })
+    let cur = unc[0]
+    for (const part of path.slice(unc[0].length).split('/').filter(Boolean)) {
       cur = `${cur}/${part}`
+      crumbs.push({ label: part, path: cur })
+    }
+  } else if (win) {
+    const root = path.slice(0, 2).toUpperCase() + '/'
+    const drive = drives?.find((d) => d.path.slice(0, 2).toUpperCase() === root.slice(0, 2))
+    crumbs.push({ label: drive?.label ?? root.slice(0, 2), path: root })
+    let cur = root
+    for (const part of path.slice(3).split('/').filter(Boolean)) {
+      cur = cur.endsWith('/') ? cur + part : `${cur}/${part}`
       crumbs.push({ label: part, path: cur })
     }
   } else {
@@ -161,7 +175,7 @@ export default function PathLine() {
       <IconButton onClick={forward} title="Forward (Alt+Right)" disabled={histIdx >= histLen - 1}>
         <ArrowRight size={16} strokeWidth={1.5} />
       </IconButton>
-      <IconButton onClick={up} title="Parent folder (Alt+Up)" disabled={path === '/'}>
+      <IconButton onClick={up} title="Parent folder (Alt+Up)" disabled={isRoot(path)}>
         <ArrowUp size={16} strokeWidth={1.5} />
       </IconButton>
       <IconButton onClick={() => void reload()} title="Reload (F5)">
@@ -171,10 +185,11 @@ export default function PathLine() {
         {editing ? (
           <PathEditor initial={tildify(path, home)} home={home} />
         ) : (
-          <div ref={crumbBox} className="flex min-w-0 items-center overflow-hidden whitespace-nowrap" title={`${path}\nEdit path (Ctrl+L)`}>
+          <div ref={crumbBox} className="flex min-w-0 items-center overflow-hidden whitespace-nowrap" title={`${tildify(path, home)}\nEdit path (Ctrl+L)`}>
             {visible.map((c, i) => (
               <span key={`${c.label}:${c.path}`} className="flex shrink-0 items-center">
-                {i > 0 && c.label !== '/' && visible[i - 1].label !== '/' && <span className="px-1 leading-none text-muted/60">/</span>}
+                {i > 0 && win && <ChevronRight size={13} strokeWidth={1.5} className="mx-0.5 shrink-0 text-muted/60" />}
+                {i > 0 && !win && c.label !== '/' && visible[i - 1].label !== '/' && <span className="px-1 leading-none text-muted/60">/</span>}
                 <button
                   onClick={() => void navigate(c.path)}
                   onDragOver={dragOver}

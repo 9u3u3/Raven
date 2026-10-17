@@ -46,21 +46,46 @@ export function basename(p: string): string {
 export function dirname(p: string): string {
   const s = p.replace(/\/+$/, '')
   const i = s.lastIndexOf('/')
-  return i <= 0 ? '/' : s.slice(0, i)
+  if (i <= 0) return '/'
+  const d = s.slice(0, i)
+  // The folder above C:/x is the drive root C:/, not "C:".
+  return /^[A-Za-z]:$/.test(d) ? d + '/' : d
+}
+
+/** A Windows path, as the sidecar sends it: C:/x (a drive) or //host/share (a share). */
+export function isWinPath(p: string): boolean {
+  return /^[A-Za-z]:(\/|$)/.test(p) || /^\/\/[^/]/.test(p)
+}
+
+/** The top of a path: / on Linux and macOS, a drive root such as C:/ on Windows. */
+export function isRoot(p: string): boolean {
+  return p === '/' || /^[A-Za-z]:\/?$/.test(p)
+}
+
+/** The folder separator that the user sees for this path. */
+export function sep(p: string): string {
+  return isWinPath(p) ? '\\' : '/'
 }
 
 export function join(dir: string, name: string): string {
   return dir.endsWith('/') ? dir + name : `${dir}/${name}`
 }
 
-/** Show the home folder as ~. */
+/** The path as the system file manager shows it. Linux and macOS show the home folder as ~.
+ * Windows shows the full path with \, like File Explorer (C:\Users\x), because Windows does not use ~. */
 export function tildify(p: string, home: string): string {
+  if (isWinPath(p)) return p.replace(/\//g, '\\')
   if (home && (p === home || p.startsWith(home + '/'))) return '~' + p.slice(home.length)
   return p
 }
 
 export function expandPath(p: string, home: string): string {
   let s = p.trim()
+  // Windows: C:\x (as File Explorer shows it) becomes C:/x (as the sidecar sends it). "C:" is the drive root.
+  if (/^[A-Za-z]:([\\/]|$)/.test(s)) {
+    s = s.replace(/\\/g, '/').replace(/\/+$/, '')
+    return s.length === 2 ? s + '/' : s
+  }
   if (s === '~' || s.startsWith('~/')) s = home + s.slice(1)
   s = s.replace(/\$HOME|\$\{HOME\}/g, home)
   if (s.length > 1) s = s.replace(/\/+$/, '')

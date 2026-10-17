@@ -2,6 +2,8 @@
 
 import os
 
+import pytest
+
 from raven_core import platform as plat
 
 
@@ -53,3 +55,14 @@ def test_native_paths_middleware_rewrites_query_and_json(monkeypatch):
     asyncio.run(plat.NativePaths(app)(scope, receive, None))
     assert seen["qs"] == b"path=C%3A%5CUsers%5Cx&hidden=true"
     assert json.loads(seen["body"]) == {"src": "C:\\a\\b.txt", "n": 1}
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows drive names")
+def test_drive_label_like_explorer():
+    root = os.environ.get("SystemDrive", "C:") + "/"
+    label = plat.drive_label(root)
+    assert label.endswith(f"({root[:2]})") and len(label) > 5
+    assert plat.drive_kind(root, "ntfs") == "drive"
+    from raven_core.fs import listing
+
+    assert any(d["path"] == root and d["label"] == label for d in listing.places()["drives"])

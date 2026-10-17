@@ -201,7 +201,14 @@ def places() -> dict:
             du = shutil.disk_usage(mnt)
         except OSError:
             continue
-        item = {"label": Path(dev).name if mnt == "/" else (Path(mnt).name or mnt), "path": mnt, "device": dev,
+        # The names that the system file manager shows: "Local Disk (C:)" on Windows, "File System" for / on Linux.
+        if plat.IS_WIN:
+            label = plat.drive_label(mnt)
+        elif mnt == "/":
+            label = "File System" if plat.IS_LINUX else Path(dev).name
+        else:
+            label = Path(mnt).name or mnt
+        item = {"label": label, "path": mnt, "device": dev,
                 "total": du.total, "free": du.free, "fstype": fstype}
         if kind == "removable" or mnt.startswith(("/run/media/", "/media/")):
             removable.append(item)

@@ -5,7 +5,7 @@ import { ArrowUp, Folder, HardDrive, Home } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { create } from 'zustand'
 import { get } from '../lib/api'
-import { tildify } from '../lib/format'
+import { dirname, expandPath, isRoot, tildify } from '../lib/format'
 import type { Listing } from '../lib/types'
 import { useApp } from '../store'
 
@@ -56,7 +56,7 @@ function Picker({ req }: { req: Req }) {
     usePicker.setState({ req: null })
     req.resolve(paths)
   }
-  const go = (p: string): void => setPath(p.replace(/^~(?=\/|$)/, home) || '/')
+  const go = (p: string): void => setPath(expandPath(p, home) || '/')
   const dirs = (list?.entries ?? []).filter((e) => e.is_dir && !e.name.startsWith('.')).sort((a, b) => a.name.localeCompare(b.name))
   const chosen = sel ?? path
   const shortcuts: [string, string, typeof Home][] = [
@@ -64,7 +64,7 @@ function Picker({ req }: { req: Req }) {
     ...(places?.folders ?? []).map((f) => [f.label, f.path, Folder] as [string, string, typeof Home]),
     ...(places?.drives ?? []).filter((d) => d.path !== '/').map((d) => [d.label, d.path, HardDrive] as [string, string, typeof Home])
   ]
-  const parent = path === '/' ? null : path.slice(0, path.lastIndexOf('/')) || '/'
+  const parent = isRoot(path) ? null : dirname(path)
 
   return (
     <div

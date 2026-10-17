@@ -162,8 +162,35 @@ def drive_kind(mnt: str, fstype: str) -> str | None:
             return "removable" if fstype in ("msdos", "exfat", "vfat") else "drive"
         return None
     if IS_WIN:
-        return "drive"
+        return "removable" if _win_drive_type(mnt) == 2 else "drive"
     return None
+
+
+def _win_drive_type(root: str) -> int:
+    """GetDriveTypeW: 2 removable, 3 fixed, 4 network, 5 CD, 6 RAM disk. 0 when the call fails."""
+    try:
+        import ctypes
+
+        return int(ctypes.windll.kernel32.GetDriveTypeW(root.rstrip("/\\") + "\\"))
+    except (AttributeError, OSError):
+        return 0
+
+
+def drive_label(root: str) -> str:
+    """The name of a drive as File Explorer shows it, for example "Local Disk (C:)" or "USB (E:)"."""
+    letter = root.rstrip("/\\")
+    name = ""
+    try:
+        import ctypes
+
+        buf = ctypes.create_unicode_buffer(261)
+        if ctypes.windll.kernel32.GetVolumeInformationW(letter + "\\", buf, 261, None, None, None, None, 0):
+            name = buf.value
+    except (AttributeError, OSError):
+        pass
+    if not name:
+        name = {2: "USB Drive", 4: "Network Drive", 5: "CD Drive"}.get(_win_drive_type(root), "Local Disk")
+    return f"{name} ({letter})"
 
 
 def trash_home() -> Path:
