@@ -116,45 +116,67 @@ def test_nobody_answers(window, monkeypatch):
         review.confirm(payload, red, "Ask", ["groq"])
 
 
-def test_candidates_are_names_in_capitals_and_money():
-    bare = "Call Ramesh about Project Falcon. Pay Kiran Rs 45,000 by Friday. The PDF is 2026-10, 109 B. Zentrix Labs uses Python."
-    assert review.candidates(bare) == ["Ramesh", "Project Falcon", "Kiran", "Zentrix Labs", "Python", "Rs 45,000"]
-
-
-def test_fast_suspects_find_long_numbers_and_codes_but_not_dates(monkeypatch):
-    monkeypatch.setattr(gate.strict, "available", lambda: False)
-    found = {s["text"]: s for s in review.fast_suspects("Order 88123456 to vendor KX99ZT4417 on IMG_20250412.jpg, [PERSON_1] 2026-10. "
-                                                        "See Project Falcon budget.")}
+def test_pattern_suspects_find_long_numbers_codes_and_projects_but_not_dates():
+    found = {s["text"]: s for s in review.pattern_suspects("Order 88123456 to vendor KX99ZT4417 on IMG_20250412.jpg, [PERSON_1] "
+                                                           "2026-10, 109 B. See Project Falcon budget.")}
     assert set(found) == {"88123456", "KX99ZT4417", "Project Falcon"}
-    assert found["88123456"]["source"] == "pattern"
+    assert found["Project Falcon"]["category"] == "project" and found["88123456"]["source"] == "pattern"
 
 
-def test_the_local_model_suspects_come_later_and_are_checked(window, monkeypatch):
-    monkeypatch.setattr(local, "available", lambda: True)
-    items = [{"text": "Zentrix Labs", "private": True, "why": "a company name"},
-             {"text": "Mumbai office", "private": True, "why": "not a candidate"},
-             {"text": "Invoice", "private": False, "why": "a common word"}]
-    asked = []
+class FakeCheck:
+    """The decision model: it scores Zentrix Labs and Kavya. It must get the category labels of the review."""
 
-    def chat(system, user, schema, max_tokens=0):
-        asked.append(user)
-        return {"items": items}
+    def __init__(self):
+        self.labels = None
 
-    monkeypatch.setattr(local, "chat", chat)
-    t, out, rv = _start(window)
+    def available(self):
+        return True
+
+    def detect(self, text, threshold=None, labels=None):
+        from raven_core.privacy.rules import Span
+
+        self.labels = labels
+        out = []
+        for word, typ, score in [("Zentrix Labs", "COMPANY", 0.83), ("Kavya", "NAME", 0.31)]:
+            i = text.find(word)
+            if i >= 0:
+                out.append(Span(typ, i, i + len(word), score, 2))
+        return out
+
+
+def test_the_model_check_scores_and_ranks_each_word_with_a_category(window, monkeypatch):
+    fake = FakeCheck()
+    monkeypatch.setattr(gate, "strict", fake)
+    global TEXT
+    old, TEXT = TEXT, TEXT + " Kavya agreed."
     try:
+        t, out, rv = _start(window)
+    finally:
+        TEXT = old
+    try:
+        assert [d["review"] for k, d in window if k == "cloud_review"][0]["check"] == "running"  # the model is fast
         for _ in range(100):
             last = [d["review"] for k, d in window if k == "cloud_review"][-1]
-            if last["llm"] == "done":
+            if last["check"] == "done":
                 break
             time.sleep(0.02)
-        ai = [s for s in last["suspects"] if s["source"] == "local AI"]
-        assert [s["text"] for s in ai] == ["Zentrix Labs"]  # the model cannot add a word that Raven did not give
-        assert "- Zentrix Labs:" in asked[0] and "Rahul" not in asked[0]
-        assert "- Project Falcon:" not in asked[0]  # the project rule found it already
-        # A hidden suspect leaves the list.
-        after = review.update(rv["id"], hide=["Zentrix Labs"])
+        got = [(s["text"], s["category"], s["score"], s["source"]) for s in last["suspects"]]
+        # Highest score first: the model's company, the project pattern, the numbers, then the weak name.
+        assert got[0] == ("Zentrix Labs", "company", 0.83, "model")
+        assert got[-1] == ("Kavya", "name", 0.31, "model")
+        assert [g[2] for g in got] == sorted((g[2] for g in got), reverse=True)
+        assert "project name" in fake.labels and "amount of money" in fake.labels
+        after = review.update(rv["id"], hide=["Zentrix Labs"])  # a hidden word leaves the list
         assert not [s for s in after["suspects"] if s["text"] == "Zentrix Labs"]
+    finally:
+        review.decide(rv["id"], False)
+        t.join(5)
+
+
+def test_without_the_model_only_patterns_run(window):
+    t, out, rv = _start(window)
+    try:
+        assert rv["check"] == "off" and {s["source"] for s in rv["suspects"]} == {"pattern"}
     finally:
         review.decide(rv["id"], False)
         t.join(5)

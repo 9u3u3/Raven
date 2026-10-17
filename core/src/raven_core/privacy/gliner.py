@@ -103,10 +103,10 @@ class Gliner:
             if self._load():
                 self._touch()
 
-    def _feeds(self, windows: list[list[str]]) -> tuple[dict, list[int]]:
+    def _feeds(self, windows: list[list[str]], labels: dict[str, str]) -> tuple[dict, list[int]]:
         """The six model inputs for a batch of word windows, padded to the longest."""
         prompt: list[str] = []
-        for label in LABELS:
+        for label in labels:
             prompt += [self.ent, label]
         prompt.append(self.sep)
         rows, masks = [], []
@@ -151,8 +151,10 @@ class Gliner:
                 keep.append(f)
         return keep
 
-    def detect(self, text: str, threshold: float | None = None) -> list[Span]:
-        """`threshold`: a lower value gives the weak finds too (the cloud review shows them as suspicious words)."""
+    def detect(self, text: str, threshold: float | None = None, labels: dict[str, str] | None = None) -> list[Span]:
+        """`threshold`: a lower value gives the weak finds too. `labels`: the model's label -> the span type, for
+        another set of types than LABELS (the cloud review asks for companies, projects and money too)."""
+        labels = labels or LABELS
         if not text.strip():
             return []
         words = [(m.start(), m.end()) for m in WORD.finditer(text)]
@@ -165,10 +167,10 @@ class Gliner:
             starts = list(range(0, max(1, len(words) - WINDOW + STRIDE), STRIDE)) or [0]
             windows = [(st, [text[a:b] for a, b in words[st:st + WINDOW]]) for st in starts]
             spans: list[Span] = []
-            types = list(LABELS.values())
+            types = list(labels.values())
             for i in range(0, len(windows), BATCH):
                 part = windows[i:i + BATCH]
-                feeds, lens = self._feeds([w for _, w in part])
+                feeds, lens = self._feeds([w for _, w in part], labels)
                 logits = self._sess.run(None, feeds)[0]
                 for (st, _), lg, n in zip(part, logits, lens):
                     for a, b, c, p in self._decode(lg, n, THRESHOLD if threshold is None else threshold):

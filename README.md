@@ -85,8 +85,9 @@ See [Run it (development)](#run-it-development) for the optional tools and the t
 **Privacy**
 - AI modes: Local only, Hybrid. Offline, the mode line says `LOCAL ONLY (offline)`.
 - Review before send: every cloud payload waits for you. You see what Raven hid, the words that may still be
-  private (from the local models and the local AI), and the exact text. You can hide more words, then send or
-  not. Send sends that exact text.
+  private, and the exact text. A local decision model (the strict privacy model) and patterns rank each
+  suspicious word with a category (name, company, project, address, money, ID number, health, password) and a
+  score. You hide what you want, then send or not. Send sends that exact text.
 - Two PII layers (patterns with checksums, and the OpenAI Privacy Filter), a redaction gate, and a ledger of every
   byte that leaves the laptop. The patterns cover India's IDs (Aadhaar, VID, PAN, GSTIN, passport, voter ID, driving
   licence, UAN, ABHA, ration card) and the types that apply everywhere (cards with CVV and expiry, IBAN, crypto

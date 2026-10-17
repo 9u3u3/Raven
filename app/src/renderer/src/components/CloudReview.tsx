@@ -68,7 +68,12 @@ export default function CloudReview() {
   }
   const left = Math.max(0, Math.round(r.created + r.wait_s - now / 1000))
   const hidden = r.items.length
-  const llm = { off: 'The local AI does not run, so only the quick check ran.', running: 'The local AI is reading the payload…', done: '', error: 'The local AI check failed. The quick check ran.' }[r.llm]
+  const check = {
+    off: 'Only the pattern check ran. Add Strict privacy in Settings, Features and models for the model check.',
+    running: 'The privacy model is checking the text…',
+    done: '',
+    error: 'The model check failed. The pattern check ran.'
+  }[r.check]
 
   return (
     <Dialog.Root open onOpenChange={(o) => !o && decide(false)}>
@@ -90,14 +95,17 @@ export default function CloudReview() {
           </Dialog.Description>
 
           <div className="min-h-0 flex-1 overflow-auto pr-1">
-            <Section title={`Suspicious words (${r.suspects.length})`} note="Still visible. A local check thinks they may be private. Hide what you do not want to share.">
-              {llm && <div className="py-1 text-[12px] text-muted">{llm}</div>}
-              {r.suspects.length === 0 && r.llm !== 'running' && <div className="py-1 text-[12px] text-muted">None found.</div>}
+            <Section title={`Suspicious words (${r.suspects.length})`} note="Still visible. A local model or a pattern thinks they may be private, most likely first. Hide what you do not want to share.">
+              {check && <div className="py-1 text-[12px] text-muted">{check}</div>}
+              {r.suspects.length === 0 && r.check !== 'running' && <div className="py-1 text-[12px] text-muted">None found.</div>}
               {r.suspects.map((s) => (
                 <div key={s.text} className="flex items-center gap-3 py-1.5 text-[12.5px]">
                   <span className="mono min-w-0 flex-1 truncate">{s.text}</span>
-                  <span className="w-56 shrink-0 truncate text-[11.5px] text-muted">{s.why}</span>
-                  <span className="mono w-16 shrink-0 text-[10.5px] text-faint">{s.source}</span>
+                  <span className={`w-24 shrink-0 rounded-sm px-1.5 py-[1px] text-center text-[11px] ${s.score >= 0.5 ? 'bg-accent-soft text-accent' : 'bg-hover text-muted'}`}>{s.category}</span>
+                  <span className="mono w-28 shrink-0 text-[11px] text-muted" title={s.source === 'model' ? 'The score of the privacy model' : 'A fixed score for a pattern'}>
+                    {Math.round(s.score * 100)} % {s.score >= 0.5 ? 'likely' : 'maybe'}
+                  </span>
+                  <span className="mono w-14 shrink-0 text-[10.5px] text-faint">{s.source}</span>
                   <button className="link" disabled={busy} onClick={() => void change({ hide: [s.text] })}>Hide</button>
                   <button className="link text-muted" disabled={busy} title="Hide it now and in every later cloud request" onClick={() => void alwaysHide(s.text)}>
                     Always hide

@@ -243,8 +243,10 @@ export type CloudReview = {
   payload: string
   bytes: number
   items: { placeholder: string; type: string; value: string; layer: number | null; can_show: boolean }[]
-  suspects: { text: string; why: string; source: 'model' | 'pattern' | 'local AI' }[]
-  llm: 'off' | 'running' | 'done' | 'error'
+  /** Visible words that may be private, highest score first (privacy/review.py). */
+  suspects: { text: string; category: string; score: number; source: 'model' | 'pattern' }[]
+  /** The decision model (GLiNER): off = not installed. */
+  check: 'off' | 'running' | 'done' | 'error'
   created: number
   wait_s: number
 }
