@@ -160,7 +160,7 @@ def test_only_the_registry_imports_an_adapter_and_only_the_gate_seals():
             continue
         assert not any(a in imp for imp in _imports(f) for a in adapters), f"{rel} imports an adapter"
         if rel != "raven_core/privacy/gate.py":
-            assert "Sealed(" not in f.read_text(), f"{rel} makes a Sealed payload"
+            assert "Sealed(" not in f.read_text(encoding="utf-8"), f"{rel} makes a Sealed payload"
     # The SDKs for the cloud come in only inside the adapters.
     for f in SRC.rglob("*.py"):
         rel = f.relative_to(SRC).as_posix()
