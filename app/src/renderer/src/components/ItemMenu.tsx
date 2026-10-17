@@ -1,10 +1,12 @@
 import * as CM from '@radix-ui/react-context-menu'
-import { Archive, ArrowRightLeft, ClipboardPaste, Copy, ExternalLink, FilePlus, FolderOpen, FolderPlus, FolderTree, Info, Link2, PenLine, PieChart, ScanSearch, ScrollText, Scissors, Star, Tags, Terminal, Trash2, Undo2, Image as ImageIcon, type LucideIcon } from 'lucide-react'
+import { Archive, ArrowRightLeft, ClipboardPaste, Copy, ExternalLink, FilePlus, FolderOpen, FolderPlus, FolderTree, Info, Link2, PenLine, PieChart, ListChecks, ScanSearch, ScrollText, Scissors, Star, Tags, Terminal, Trash2, Undo2, Image as ImageIcon, type LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { get, post } from '../lib/api'
 import { showInSpace } from '../screens/SpaceScreen'
 import {
   ARCHIVE,
+  invertSelection,
+  selectAll,
   POLICY_NAMES,
   loadPolicies,
   makeLink,
@@ -54,6 +56,7 @@ const ICON: [RegExp, LucideIcon][] = [
   [/^Copy (relative )?paths?$/, Link2],
   [/^Copy/, Copy],
   [/^Paste/, ClipboardPaste],
+  [/^Select all/, ListChecks],
   [/^Extract/, Archive],
   [/^Rename/, PenLine],
   [/^New folder/, FolderPlus],
@@ -212,6 +215,8 @@ export function ItemMenuContent() {
         {!none && <Item label="Cut" keys="Ctrl+X" onSelect={() => copySelection('cut')} />}
         {!none && <Item label="Copy" keys="Ctrl+C" onSelect={() => copySelection('copy')} />}
         <Item label={one?.is_dir ? 'Paste into folder' : 'Paste'} keys="Ctrl+V" disabled={!clipboard || readOnly} onSelect={() => void paste(folderTarget)} />
+        <Item label="Select all" keys="Ctrl+A" onSelect={selectAll} />
+        {!none && <Item label="Invert selection" keys="Ctrl+Shift+I" onSelect={invertSelection} />}
         <Sep />
         {!none && !readOnly && entries.every((e) => !e.is_dir) && <ConvertMenu paths={paths} />}
         {one && !one.is_dir && ARCHIVE.test(one.name) && !readOnly && <Item label="Extract here" onSelect={() => void extractArchive(one.path)} />}

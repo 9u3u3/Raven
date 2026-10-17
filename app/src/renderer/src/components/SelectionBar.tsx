@@ -1,4 +1,4 @@
-import { copySelection, selectOnly, selectedPaths, trashSelection, useApp } from '../store'
+import { copySelection, selectAll, selectOnly, selectedPaths, trashSelection, useApp, visibleEntries } from '../store'
 
 // A strip of ink that rises from the bottom when files are selected: the common actions as plain words.
 // It calls the same actions as the keyboard shortcuts and the context menu.
@@ -13,6 +13,8 @@ function Act({ label, keys, run, danger }: { label: string; keys?: string; run: 
 export default function SelectionBar() {
   const count = useApp((s) => s.selected.size)
   const readOnly = useApp((s) => !!s.listing?.archive)
+  // Re-read when the listing or the filter changes, so the button hides once every item is selected.
+  const total = useApp((s) => (s.listing ? visibleEntries().length : 0))
   if (count === 0) return null
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center">
@@ -28,6 +30,7 @@ export default function SelectionBar() {
         {!readOnly && count === 1 && <Act label="Rename" keys="F2" run={() => useApp.setState({ renaming: selectedPaths()[0] })} />}
         {!readOnly && <Act label="Trash" keys="Delete" danger run={() => void trashSelection()} />}
         <span className="mx-1 h-5 w-px bg-white/10" />
+        {count < total && <Act label={`Select all ${total}`} keys="Ctrl+A" run={selectAll} />}
         <button className="px-3 py-2 text-console-text/60 transition-colors hover:text-console-text" onClick={() => selectOnly(null)} title="Clear selection (Esc)" aria-label="Clear selection">
           ✕
         </button>
