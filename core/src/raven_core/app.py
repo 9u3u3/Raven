@@ -66,6 +66,9 @@ async def lifespan(app: FastAPI):
     _write_discovery()
     yield
     _remove_discovery()
+    from .memory import unload_ollama
+
+    unload_ollama()
     if _started["done"]:
         indexer.shutdown()
         dir_watch.stop()

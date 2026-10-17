@@ -11,6 +11,10 @@ import httpx
 from .. import config
 
 LLM = os.environ.get("RAVEN_LLM", "qwen3:4b")
+# How long Ollama keeps the model in memory after a call. A day (the old value) kept 2.5 to 5 GB busy for one question.
+KEEP = os.environ.get("RAVEN_LLM_KEEP", "5m")  # after a call from the user: the next question is quick
+KEEP_BACKGROUND = "1m"  # after background work: the next batch comes within a second, then the model unloads
+_used = False  # Raven called the model in this run, so unload() frees it at exit
 
 
 def use_model(name: str) -> None:
@@ -68,8 +72,19 @@ def unavailable_reason() -> str:
     return _why or f"The local model {LLM} is not in Ollama. Run: ollama pull {LLM}"
 
 
-def chat(system: str, user: str, schema: dict, max_tokens: int = 450) -> dict:
-    """Short JSON task: schema output, a token limit, no thinking (section 5.2 rule 8)."""
+def background_allowed() -> bool:
+    """Background LLM work (folder summaries, file categories) runs only on mains power with an idle computer.
+    A request from the user always runs."""
+    from ..compress.auto import idle, on_ac
+
+    return on_ac() and idle()
+
+
+def chat(system: str, user: str, schema: dict, max_tokens: int = 450, background: bool = False) -> dict:
+    """Short JSON task: schema output, a token limit, no thinking (section 5.2 rule 8). A call from the user
+    pauses background indexing. A background call does not, and the model unloads sooner after it."""
+    if background:
+        return _chat(system, user, schema, max_tokens, KEEP_BACKGROUND)
     from ..index.indexer import indexer
 
     was_set = indexer.interactive.is_set()
@@ -81,14 +96,16 @@ def chat(system: str, user: str, schema: dict, max_tokens: int = 450) -> dict:
             indexer.interactive.clear()
 
 
-def _chat(system: str, user: str, schema: dict, max_tokens: int) -> dict:
+def _chat(system: str, user: str, schema: dict, max_tokens: int, keep: str = KEEP) -> dict:
+    global _used
+    _used = True
     body = {
         "model": LLM,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "format": schema,
         "stream": False,
         "think": False,
-        "keep_alive": "24h",
+        "keep_alive": keep,
         "options": {"temperature": 0.2, "num_predict": max_tokens, "num_ctx": 8192},
     }
     try:
@@ -137,9 +154,21 @@ def salvage(content: str) -> dict | None:
     return None
 
 
-def warm() -> None:
+def unload() -> None:
+    """At exit: Ollama frees the model now, not after KEEP. An Ollama that ran before Raven keeps running."""
+    if not _used:
+        return
     try:
-        _client.post("/api/generate", json={"model": LLM, "prompt": "", "keep_alive": "24h"}, timeout=60)
+        _client.post("/api/generate", json={"model": LLM, "prompt": "", "keep_alive": 0}, timeout=2)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def warm() -> None:
+    global _used
+    _used = True
+    try:
+        _client.post("/api/generate", json={"model": LLM, "prompt": "", "keep_alive": KEEP}, timeout=60)
     except Exception:  # noqa: BLE001
         pass
 
@@ -211,9 +240,11 @@ def stream(system: str, messages: list[dict], max_tokens: int = 400):
         "format": ANSWER_SCHEMA,
         "stream": True,
         "think": False,
-        "keep_alive": "24h",
+        "keep_alive": KEEP,
         "options": {"temperature": 0.1, "num_predict": max_tokens, "num_ctx": 8192},
     }
+    global _used
+    _used = True
     dec = _JsonString()
     try:
         with _client.stream("POST", "/api/chat", json=body) as r:

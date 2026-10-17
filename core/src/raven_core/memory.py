@@ -52,3 +52,16 @@ def unload_when_idle(obj, name: str, attrs: tuple[str, ...] = ("_sess",), idle: 
             log.info("%s unloaded after %.0f s with no use", name, wait)
 
     threading.Thread(target=run, name=f"{name}-unload", daemon=True).start()
+
+
+def unload_ollama() -> None:
+    """At exit: Ollama frees the models that Raven used (the LLM and the embedding model). The models in this
+    process go with the process."""
+    from .index import embed
+    from .router import local
+
+    for f in (local.unload, embed.unload):
+        try:
+            f()
+        except Exception:  # noqa: BLE001
+            pass

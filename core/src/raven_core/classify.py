@@ -214,7 +214,7 @@ def by_llm(rows: list[dict]) -> dict[int, tuple[str, float, str]]:
         ch = c.execute("SELECT text FROM chunks WHERE file_id=? ORDER BY id LIMIT 1", (r["id"],)).fetchone()
         text = " ".join((ch[0] if ch else "").split())[:300]
         lines.append(f"{n}. {r['name']}: {text or '(no text)'}")
-    data = local.chat(LLM_SYSTEM, "\n".join(lines), LLM_SCHEMA, max_tokens=60 * len(rows))
+    data = local.chat(LLM_SYSTEM, "\n".join(lines), LLM_SCHEMA, max_tokens=60 * len(rows), background=True)
     out = {}
     for it in data.get("items", []):
         try:
@@ -308,7 +308,7 @@ def step(indexer) -> bool:
         return bool(rows_nochunk)
     from .router import local
 
-    if not local.available():
+    if not local.background_allowed() or not local.available():
         return False
     try:
         res = by_llm([dict(r) for r in rows])

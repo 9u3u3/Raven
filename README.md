@@ -146,6 +146,8 @@ plan expects.
 | Redaction of new text (both layers, CPU, model loaded) | 53 ms | 50 ms (the budget is for cached spans) |
 | Redaction with Strict privacy (3 models, 40 words, loaded) | 96 ms | 1.4 s more for each 1,000 words |
 | Redaction, first call after the model unloads | 0.8 s | the model loads while Ask searches |
+| First search after a start or 5 idle minutes: reranker load | 0.1 s more | |
+| First search by appearance: SigLIP 2 load | 0.9 s more | |
 | Ask, first word (local qwen3:4b) | 2.5 s | 1 s, missed: the GPU state above |
 
 | Quality | Result |
@@ -301,6 +303,18 @@ core/.venv/bin/python testdata/shots.py            # screenshots of every screen
 
 The sidecar keeps its database, caches and models in `~/.local/share/raven` (Windows: `%LOCALAPPDATA%\raven`, macOS:
 `~/Library/Application Support/raven`). Set `RAVEN_DATA_DIR` to use another folder, and `RAVEN_MODELS_DIR` for models.
+
+## Models in memory
+
+Raven loads a model only when a task needs it, and frees it when the task is done:
+
+- Ollama keeps the local LLM 5 minutes after a call from you and 1 minute after background work. It keeps the
+  embedding model 10 minutes, because each search needs it. `RAVEN_LLM_KEEP` and `RAVEN_EMBED_KEEP` change this.
+- The models in the sidecar (Privacy Filter, Strict privacy, the reranker, SigLIP 2, static embeddings) unload after
+  5 idle minutes. Whisper unloads when no audio waits. Nothing loads at start before you search.
+- Background LLM work (folder summaries, file categories) runs only on mains power with an idle computer.
+- When Raven quits, it stops the Ollama that it started. An Ollama that ran before Raven keeps running, but Raven
+  tells it to free Raven's models at once.
 
 ## Known limits
 

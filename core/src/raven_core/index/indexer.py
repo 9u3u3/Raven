@@ -323,7 +323,6 @@ class Indexer:
             (self._disk_dirs_loop, "disk-dirs"),
             (self._visual_loop, "index-visual"),
             (self._transcribe_loop, "index-transcribe"),
-            (self._warm_loop, "index-warm"),
             (self._binary_loop, "index-binary"),
         ):
             t = threading.Thread(target=target, name=name, daemon=True)
@@ -693,20 +692,6 @@ class Indexer:
         from ..search import vectors
 
         vectors.loop(self.stop)
-
-    def _warm_loop(self) -> None:
-        """Load the small search models once at start, so the first query does not pay for it."""
-        from ..search import rerank
-
-        if rerank.model.available():
-            rerank.model.warm()
-        from ..media import siglip
-
-        if siglip.available() and db.conn().execute("SELECT 1 FROM visual LIMIT 1").fetchone():
-            try:
-                siglip.model.embed_text("warm up")
-            except Exception:  # noqa: BLE001
-                log.exception("SigLIP warm-up failed")
 
     def _folder_loop(self) -> None:
         from ..search import folders

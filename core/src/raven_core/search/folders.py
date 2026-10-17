@@ -323,14 +323,14 @@ def summarize_some(indexer, batch: int = 4) -> int:
         "ORDER BY files DESC LIMIT ?",
         (batch,),
     ).fetchall()
-    if not rows or not local.available() or not indexer.state.get("embed_ready"):
+    if not rows or not local.background_allowed() or not local.available() or not indexer.state.get("embed_ready"):
         return 0
     done = 0
     for r in rows:
         if indexer.interactive.is_set() or indexer.stop.is_set():
             break
         try:
-            data = local._chat(SUMMARY_SYSTEM, r["profile"][:3500] + "\n/no_think", SUMMARY_SCHEMA, max_tokens=110)
+            data = local._chat(SUMMARY_SYSTEM, r["profile"][:3500] + "\n/no_think", SUMMARY_SCHEMA, 110, local.KEEP_BACKGROUND)
             summary = " ".join(str(data.get("summary", "")).split())[:400]
             if _BAD_SUMMARY.search(summary):
                 summary = ""

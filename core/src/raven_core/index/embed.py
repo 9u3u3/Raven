@@ -46,6 +46,9 @@ def is_static(m: str | None = None) -> bool:
     return (m or model()).startswith("potion")
 
 
+# How long Ollama keeps the embedding model after a call. Each search needs it, so it stays longer than the LLM.
+KEEP = os.environ.get("RAVEN_EMBED_KEEP", "10m")
+_used_ollama = False  # Raven called the Ollama model in this run, so unload() frees it at exit
 STATIC_IDLE = float(os.environ.get("RAVEN_STATIC_IDLE", "300"))  # seconds: an unused static model leaves memory (it loads again in about 0.3 s)
 
 
@@ -91,7 +94,9 @@ def _embed(inputs: list[str]) -> list[list[float]]:
     if is_static(m):
         vecs = _static_model(m).encode(inputs, normalize=True)
         return [v.tolist() for v in vecs]
-    r = _client.post("/api/embed", json={"model": m, "input": inputs, "keep_alive": "24h", "truncate": True})
+    global _used_ollama
+    _used_ollama = True
+    r = _client.post("/api/embed", json={"model": m, "input": inputs, "keep_alive": KEEP, "truncate": True})
     r.raise_for_status()
     return r.json()["embeddings"]
 
@@ -126,6 +131,16 @@ def available() -> bool:
         return model().split(":")[0] in names
     except Exception:
         return False
+
+
+def unload() -> None:
+    """At exit: Ollama frees the embedding model now. An Ollama that ran before Raven keeps running."""
+    if not _used_ollama:
+        return
+    try:
+        _client.post("/api/embed", json={"model": model(), "input": [], "keep_alive": 0}, timeout=2)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def warm() -> int | None:

@@ -28,6 +28,9 @@ def _watch_parent() -> None:
             try:
                 os.kill(pid, 0)
             except ProcessLookupError:
+                from .memory import unload_ollama
+
+                unload_ollama()  # a system Ollama keeps running, without Raven's models
                 os._exit(0)
             except PermissionError:
                 pass
