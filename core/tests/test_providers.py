@@ -300,7 +300,7 @@ def test_gemini_chat_and_models(monkeypatch):
     monkeypatch.setattr(gemini, "_client", lambda ctx: type("C", (), {"models": Models()})())
     assert [m["id"] for m in reg.models("gemini", fresh=True)] == ["gemini-2.5-flash", "gemini-2.5-pro"]
     data, label = reg.chat("gemini", "sys", sealed(), {"type": "object"})
-    assert data == {"summary": "ok"} and label == "Google Gemini · gemini-2.5-flash"
+    assert data == {"summary": "ok"} and label == "Google Gemini · gemini-2.5-pro"  # the strongest listed model
     assert sent["config"].response_mime_type == "application/json" and sent["config"].system_instruction == "sys"
 
 

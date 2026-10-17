@@ -33,12 +33,12 @@ log = logging.getLogger("raven.providers")
 PRESETS: dict[str, dict] = {
     "anthropic": {
         "name": "Anthropic", "adapter": "anthropic", "base_url": "https://api.anthropic.com",
-        "prefer": ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"], "key_hint": "sk-ant-…",
+        "prefer": ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"], "key_hint": "sk-ant-…",
         "key_url": "https://console.anthropic.com/settings/keys", "free": "",
     },
     "openai": {
         "name": "OpenAI", "adapter": "openai", "base_url": "https://api.openai.com/v1",
-        "prefer": ["gpt-5-mini", "gpt-5", "gpt-4.1-mini", "gpt-4o-mini"], "key_hint": "sk-…",
+        "prefer": ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5", "gpt-5", "gpt-5-mini"], "fallback": "gpt-5", "key_hint": "sk-…",
         "key_url": "https://platform.openai.com/api-keys", "free": "",
         "skip": ("embedding", "whisper", "tts", "dall-e", "image", "audio", "realtime", "moderation", "transcribe",
                  "search", "davinci", "babbage", "codex", "computer-use", "sora"),
@@ -60,7 +60,8 @@ PRESETS: dict[str, dict] = {
     },
     "gemini": {
         "name": "Google Gemini", "adapter": "gemini", "base_url": "https://generativelanguage.googleapis.com",
-        "prefer": ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"], "key_hint": "AIza…",
+        "prefer": ["gemini-3.1-pro", "gemini-3.5-flash", "gemini-3-pro", "gemini-2.5-pro", "gemini-2.5-flash"],
+        "fallback": "gemini-2.5-flash", "key_hint": "AIza…",
         "key_url": "https://aistudio.google.com/apikey",
         "free": "Free plan with rate limits. Google can use free-plan prompts to improve its products.",
     },
@@ -270,7 +271,10 @@ def models(pid: str, fresh: bool = False) -> list[dict]:
 
 
 def model_for(row: dict) -> str:
-    """The row's model, or the first preferred model the provider has, or its first model."""
+    """The row's model, or the first preferred model the provider has, or its first model. The "prefer" lists
+    put the strongest model first (owner rule: the best model for each task). A name counts only when the
+    provider's own list has it, so a new or wrong name in the list does no harm. With no list, Raven uses the
+    "fallback" name, a model that is sure to exist."""
     if row["model"]:
         return row["model"]
     p = PRESETS[row["preset"]]
@@ -287,8 +291,8 @@ def model_for(row: dict) -> str:
             return free[0]
     if have:
         return have[0]
-    if p["prefer"]:
-        return p["prefer"][0]
+    if p.get("fallback") or p["prefer"]:
+        return p.get("fallback") or p["prefer"][0]
     raise CloudError(f"{label(row['id'])}: pick a model in Settings, AI providers")
 
 
