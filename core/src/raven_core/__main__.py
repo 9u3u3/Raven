@@ -19,21 +19,31 @@ def _watch_parent() -> None:
     import time
 
     pid = int(os.environ.get("RAVEN_PARENT_PID") or 0)
-    if not pid or os.name == "nt":
+    if not pid:
         return
+
+    def alive() -> bool:
+        if os.name == "nt":
+            # Windows: os.kill(pid, 0) ends the process, so ask psutil.
+            import psutil
+
+            return psutil.pid_exists(pid)
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            pass
+        return True
 
     def run():
         while True:
             time.sleep(2)
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
+            if not alive():
                 from .memory import unload_ollama
 
                 unload_ollama()  # a system Ollama keeps running, without Raven's models
                 os._exit(0)
-            except PermissionError:
-                pass
 
     threading.Thread(target=run, name="parent-watch", daemon=True).start()
 

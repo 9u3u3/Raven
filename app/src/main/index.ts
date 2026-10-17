@@ -144,7 +144,9 @@ async function startSidecar(): Promise<void> {
       RAVEN_MEDIA_TOKEN: cfg.mediaToken,
       RAVEN_MAIN_LOG: MAIN_LOG
     },
-    stdio: ['ignore', 'inherit', 'inherit']
+    stdio: ['ignore', 'inherit', 'inherit'],
+    // Windows: the sidecar is a console program. Without this, a black console window opens next to Raven.
+    windowsHide: true
   })
   sidecar.on('exit', (code) => {
     sidecar = null

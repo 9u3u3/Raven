@@ -33,11 +33,13 @@ jobs:
           if [ "$RUNNER_OS" = Linux ]; then sudo apt-get install -y -q zstd p7zip-full libjxl-tools libavif-bin; fi
           if [ "$RUNNER_OS" = Windows ]; then choco install -y zstandard 7zip; fi
 
+      # faulthandler_timeout prints the stack of a test that runs longer than 120 s.
       - name: Tests
         working-directory: core
+        timeout-minutes: 25
         run: |
           uv sync --dev --frozen
-          uv run pytest -q
+          uv run pytest -q -rs -o faulthandler_timeout=120
 
       # PLAN4 7.3: recall of the pattern layer on the synthetic set. A high-risk type below 0.99 fails the run.
       - name: PII recall (patterns)
