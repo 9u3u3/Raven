@@ -101,9 +101,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The builds only (raven-<os>), not the smoke test files.
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: raven-*
           merge-multiple: true
 
       - name: SHA-256 sums

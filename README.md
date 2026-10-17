@@ -243,8 +243,10 @@ cd ../app && pnpm dist:linux          # release/Raven-<version>-x86_64.AppImage
 ```
 
 PyInstaller freezes the sidecar with its own Python. The package has no models: the first run downloads them.
-PyInstaller cannot build for another system, so Windows (NSIS) and macOS (dmg) builds run in GitHub Actions:
-`.github/workflows/build.yml` runs on a `v*` tag or by hand (Actions, Build, Run workflow).
+PyInstaller cannot build for another system, so the Windows (NSIS) build runs in GitHub Actions:
+`.github/workflows/build.yml` runs on a `v*` tag or by hand (Actions, Build, Run workflow). After each build,
+`core/scripts/smoke_package.py` installs the package on the runner, starts the sidecar and the app, saves a
+screenshot, and checks that the sidecar stops with the app. `CHANGELOG.md` holds the version notes.
 
 ## Use Raven from Claude Desktop (MCP)
 
@@ -324,8 +326,11 @@ Raven loads a model only when a task needs it, and frees it when the task is don
   this computer has no WebDAV backend, so WebDAV and S3 are tested through rclone only.
 - Lite mode with `potion-retrieval-32m` (8 GB RAM and more) holds about 335 MB while the model is loaded. It
   unloads after 5 idle minutes (about 250 MB).
-- Windows and macOS code paths exist (drives, owners and ACLs, trash, UNC shares, UAC, LibreOffice paths), but nobody
-  has run Raven on Windows or macOS yet. The CI workflow builds them.
+- Windows: the sidecar tests run in CI on Windows Server 2022, and the build workflow installs and starts the NSIS
+  package there (`core/scripts/smoke_package.py`). The builds are not signed, so SmartScreen warns at the first start.
+  Network shares on Windows (`net use`) have no automatic test.
+- macOS: the code paths exist (drives, owners, trash, LibreOffice paths), but nobody has run Raven on macOS yet. The
+  first release is for Linux and Windows.
 - Find by appearance uses SigLIP 2 on page images, not ColPali. It finds a page by its look and its large text, but
   not by small text in a dense table.
 - The reranker is MiniLM L6 (English). The plan's first choice, bge-reranker-v2-m3, is 571 MB and too slow on this CPU.
