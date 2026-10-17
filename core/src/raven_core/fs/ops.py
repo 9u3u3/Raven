@@ -318,8 +318,17 @@ def newfile(parent: str, name: str = "New file.txt", source: str = "manual") -> 
     return target
 
 
+def in_trash(path: str) -> bool:
+    """True for an item directly in a trash folder (<data>/Trash/files or <top>/.Trash-<uid>/files)."""
+    files = Path(path).parent
+    return files.name == "files" and (files.parent.name == "Trash" or files.parent.name.startswith(".Trash-")) and (
+        files.parent / "info").is_dir()
+
+
 def trash(paths: Iterable[str], source: str = "manual", label: str | None = None, group: Group | None = None) -> int:
     paths = list(paths)
+    if any(in_trash(p) for p in paths):
+        raise OpError("These items are in the trash already. Delete them permanently?", 409, code="in_trash")
     g = group or Group(source, label or f"Trash {len(paths)} item{'s' if len(paths) != 1 else ''}")
     n = 0
     try:
@@ -372,10 +381,33 @@ def delete(paths: Iterable[str], source: str = "manual") -> int:
                 shutil.rmtree(pp)
             else:
                 pp.unlink()
+            # An item deleted from a trash folder: remove its .trashinfo too, or the trash keeps a stale entry.
+            if in_trash(p):
+                (pp.parent.parent / "info" / f"{pp.name}.trashinfo").unlink(missing_ok=True)
             g.add("delete", p, None)
     finally:
         g.commit()
+        _end_groups_at([r[1] for r in g.rows])
     return len(g.rows)
+
+
+def _end_groups_at(paths: list[str]) -> None:
+    """Older actions whose result is now deleted cannot be undone. Mark their whole group DEAD, so Undo
+    skips them and does not fail on a missing file (for example a trashed file deleted from the trash)."""
+    if not paths:
+        return
+    with db.tx() as c:
+        dead = set()
+        for p in paths:
+            for (gid,) in c.execute(
+                "SELECT DISTINCT group_id FROM operations WHERE undone=? AND (dst=? OR dst LIKE ? ESCAPE '\\')",
+                (LIVE, p, p.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "/%"),
+            ):
+                dead.add(gid)
+        for gid in dead:
+            c.execute("UPDATE operations SET undone=? WHERE group_id=?", (DEAD, gid))
+    if dead:
+        events.publish("journal", group=None, label="")
 
 
 # ---------------------------------------------------------------- undo / redo

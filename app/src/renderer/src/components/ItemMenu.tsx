@@ -5,6 +5,7 @@ import { get, post } from '../lib/api'
 import { showInSpace } from '../screens/SpaceScreen'
 import {
   ARCHIVE,
+  inTrash,
   invertSelection,
   selectAll,
   POLICY_NAMES,
@@ -195,7 +196,7 @@ export function ItemMenuContent() {
   return (
     <CM.Portal>
       <CM.Content className="z-50 min-w-[240px] float-panel anim-pop py-1.5">
-        {!none && /\/(\.local\/share\/Trash|\.Trash-\d+)\/files$/.test(current) && (
+        {!none && inTrash(current) && (
           <>
             <Item label="Restore" onSelect={() => void restoreFromTrash(paths)} />
             <Sep />
@@ -270,8 +271,8 @@ export function ItemMenuContent() {
         {!none && !readOnly && (
           <>
             <Sep />
-            <Item label="Move to trash" keys="Delete" onSelect={() => void trashSelection()} />
-            <Item label="Delete permanently" keys="Shift+Delete" danger onSelect={deleteSelection} />
+            {!inTrash(current) && <Item label="Move to trash" keys="Delete" onSelect={() => void trashSelection()} />}
+            <Item label="Delete permanently" keys={inTrash(current) ? 'Delete' : 'Shift+Delete'} danger onSelect={deleteSelection} />
             {entries.every((e) => !e.is_link) && <Item label="Shred…" danger onSelect={shredSelection} />}
           </>
         )}

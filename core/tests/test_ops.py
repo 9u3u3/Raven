@@ -80,6 +80,22 @@ def test_trash_undo_redo(tree):
     assert p.exists()
 
 
+
+def test_delete_in_the_trash_removes_the_info_file(tree):
+    p = tree / "a" / "one.txt"
+    ops.trash([str(p)])
+    trash = os.path.join(os.environ["XDG_DATA_HOME"], "Trash")
+    name = next(n for n in os.listdir(os.path.join(trash, "files")) if n.startswith("one"))
+    assert os.path.exists(os.path.join(trash, "info", f"{name}.trashinfo"))
+    with pytest.raises(ops.OpError, match="in the trash already"):
+        ops.trash([os.path.join(trash, "files", name)])
+    ops.delete([os.path.join(trash, "files", name)])
+    assert not os.path.exists(os.path.join(trash, "files", name))
+    assert not os.path.exists(os.path.join(trash, "info", f"{name}.trashinfo"))
+    # The move to the trash cannot be undone now. Undo skips it and does not fail on the missing file.
+    drain()
+
+
 def test_mkdir_newfile_undo(tree):
     d = ops.mkdir(str(tree))
     f = ops.newfile(str(tree))

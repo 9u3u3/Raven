@@ -596,6 +596,11 @@ export function controlJob(id: string, action: 'pause' | 'resume' | 'cancel'): v
   void post<CopyJob>(`/fs/jobs/${id}/${action}`).then((j) => set({ jobs: { ...st().jobs, [j.id]: j } })).catch(fail)
 }
 
+/** True when the open folder is a trash folder: there, Delete means delete permanently. */
+export function inTrash(dir: string | undefined = st().listing?.path): boolean {
+  return !!dir && /\/(Trash|\.Trash-\d+)\/files$/.test(dir)
+}
+
 export async function restoreFromTrash(paths: string[]): Promise<void> {
   await change(
     `Restoring ${plural(paths.length, 'item')}…`,
@@ -613,6 +618,8 @@ function readOnly(): boolean {
 
 export async function trashSelection(): Promise<void> {
   if (readOnly()) return
+  // Items in the trash cannot go to the trash again: delete them, after the confirm.
+  if (inTrash()) return deleteSelection()
   const paths = selectedPaths()
   if (!paths.length) return
   const list = visibleEntries()
@@ -623,7 +630,8 @@ export async function trashSelection(): Promise<void> {
     () =>
       post<{ count: number; journal: Journal }>('/fs/trash', { paths }).catch((e) => {
         // A share with no trash (PLAN2 P2-9.4): offer a permanent delete instead.
-        noTrash = e instanceof ApiError && e.data?.code === 'no_trash'
+        // Items that are in the trash already get the same offer.
+        noTrash = e instanceof ApiError && (e.data?.code === 'no_trash' || e.data?.code === 'in_trash')
         throw e
       }),
     (r) => `Moved ${plural(r.count, 'item')} to the trash`,

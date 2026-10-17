@@ -25,8 +25,8 @@ export default function ConfirmDialog() {
             <Dialog.Close className="link text-muted hover:text-text">Cancel (Esc)</Dialog.Close>
             <button
               autoFocus
-              className="px-5 py-1.5 font-medium text-white transition-[filter] hover:brightness-110"
-              style={{ borderRadius: 2, background: c?.danger ? 'var(--danger)' : 'var(--accent)' }}
+              className="btn-primary"
+              style={c?.danger ? { background: 'var(--danger)', color: 'var(--bg)' } : undefined}
               onClick={() => {
                 c?.run()
                 close()
