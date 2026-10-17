@@ -73,6 +73,7 @@ def test_compress_undo(tmp_path):
     assert jobs.get_job(job["id"])["status"] == "undone"
 
 
+@pytest.mark.skipif(not shutil.which("cjxl"), reason="needs cjxl (libjxl)")
 def test_jxl_and_zst(tmp_path):
     photos = tmp_path / "trip"
     photos.mkdir()
@@ -115,7 +116,10 @@ def _photo(path, size=(1200, 900)):
     Image.fromarray(base).save(path, quality=95)
 
 
-@pytest.mark.parametrize("method", ["avif", "jxl-q"])
+@pytest.mark.parametrize("method", [
+    pytest.param("avif", marks=pytest.mark.skipif(not shutil.which("avifenc"), reason="needs avifenc (libavif)")),
+    pytest.param("jxl-q", marks=pytest.mark.skipif(not shutil.which("cjxl"), reason="needs cjxl (libjxl)")),
+])
 def test_lossy_needs_consent_and_has_no_restore(tmp_path, method):
     p = tmp_path / "beach.jpg"
     _photo(p)

@@ -24,7 +24,7 @@ def test_watch_dirs_skip_dependencies_and_limit(tmp_path):
     assert full and dirs[0] == str(tmp_path) and len(dirs) == 2
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root can read every folder")
+@pytest.mark.skipif(os.name == "nt" or os.geteuid() == 0, reason="root can read every folder, and Windows has no chmod 0")
 def test_watcher_survives_an_unreadable_folder(tmp_path, monkeypatch):
     (tmp_path / "docs").mkdir()
     locked = tmp_path / "lost+found"

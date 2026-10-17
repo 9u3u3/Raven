@@ -1,6 +1,7 @@
 """Privacy: layer-1 recognizers, the gate, placeholders, the final check and the router policy."""
 
 import os
+import re
 import tempfile
 
 _tmp = tempfile.mkdtemp(prefix="raven-privacy-")
@@ -77,6 +78,12 @@ def cloud_ready(monkeypatch):
     monkeypatch.setattr(registry, "chat", chat)
     monkeypatch.setattr(cloud, "online", lambda: True)
     monkeypatch.setattr(gate, "layer2_ready", lambda: None)
+    # A fake Privacy Filter that finds the test names, so the tests run without the model (CI has none).
+    monkeypatch.setattr(gate.layer2, "available", lambda: True)
+    monkeypatch.setattr(gate.layer2, "error", None)
+    monkeypatch.setattr(gate.layer2, "warm", lambda: None)
+    monkeypatch.setattr(gate.layer2, "detect", lambda text: [
+        rules.Span("PERSON", m.start(), m.end(), 0.99, layer=2) for m in re.finditer(r"Rahul|Sharma", text)])
     # The user presses Send in each review (PLAN4 7.7). tests/test_review.py tests the review itself.
     monkeypatch.setattr(review, "confirm", lambda payload, red, feature, providers, system="": payload)
     return sent

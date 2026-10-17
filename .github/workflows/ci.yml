@@ -1,4 +1,4 @@
-# Checks on each push and pull request: sidecar tests on three systems, the TypeScript check, and audits
+# Checks on each push and pull request: sidecar tests on Linux and Windows, the TypeScript check, and audits
 # of the Python and Node dependencies. The release build is in build.yml.
 name: CI
 
@@ -17,11 +17,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2022, macos-14]
+        # macOS is not in the first release (PLAN4 R5 covers Linux and Windows). Add macos-14 back with it.
+        os: [ubuntu-24.04, windows-2022]
     runs-on: ${{ matrix.os }}
-    # The tests use Linux paths and the FreeDesktop trash. Nobody has run them on Windows or macOS yet,
-    # so a failure there does not fail the run. Remove this line when those two systems are green.
-    continue-on-error: ${{ matrix.os != 'ubuntu-22.04' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,8 +30,7 @@ jobs:
       - name: Archive tools
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = Linux ]; then sudo apt-get install -y -q zstd p7zip-full; fi
-          if [ "$RUNNER_OS" = macOS ]; then brew install zstd p7zip; fi
+          if [ "$RUNNER_OS" = Linux ]; then sudo apt-get install -y -q zstd p7zip-full libjxl-tools libavif-bin; fi
           if [ "$RUNNER_OS" = Windows ]; then choco install -y zstandard 7zip; fi
 
       - name: Tests
