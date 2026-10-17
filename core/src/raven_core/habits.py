@@ -59,6 +59,10 @@ def _since() -> int:
 def record(kind: str, path: str | None = None, query: str | None = None, extra: dict | None = None) -> None:
     if kind not in KINDS or not enabled():
         return
+    from .privacy.scope import is_private
+
+    if path and is_private(path):
+        return  # a private folder (PLAN4 7.6): Raven learns nothing from it
     init()
     folder = os.path.dirname(path) if path else None
     ext = path.rsplit(".", 1)[-1].lower() if path and "." in os.path.basename(path) else None

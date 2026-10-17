@@ -59,7 +59,7 @@ def _lock_data_dir() -> None:
 
 
 def main() -> None:
-    # A crash in native code (PyMuPDF, onnxruntime) prints the Python stack of every thread.
+    # A crash in native code (PDFium, onnxruntime) prints the Python stack of every thread.
     import faulthandler
 
     faulthandler.enable()

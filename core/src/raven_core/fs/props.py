@@ -482,7 +482,10 @@ def is_system(path: str) -> bool:
 
 # full_index (PLAN3 P0-7): the indexer reads every file of the code projects in this folder. Without it, a code
 # project is one row in the index.
-POLICIES = ("no_index", "no_cloud", "protect", "no_compress", "full_index")
+# private (PLAN4 7.6): no AI and no model of any kind sees the folder (privacy/scope.py). It also counts as
+# no_index, no_cloud and no_compress, so every older check keeps the folder out too.
+POLICIES = ("no_index", "no_cloud", "protect", "no_compress", "full_index", "private")
+PRIVATE_IMPLIES = {"no_index", "no_cloud", "no_compress"}
 
 
 def _policy_table() -> None:
@@ -534,10 +537,16 @@ def policy_for(path: str, flag: str) -> bool:
             _policy_cache["rows"] = []
         _policy_cache["ts"] = now
     p = os.path.abspath(path)
+    implied = flag in PRIVATE_IMPLIES
     for r in _policy_cache["rows"]:
-        if r[flag] and (p == r["path"] or p.startswith(r["path"].rstrip("/") + "/")):
+        if (r[flag] or (implied and r["private"])) and (p == r["path"] or p.startswith(r["path"].rstrip("/") + "/")):
             return True
     return False
+
+
+def private_paths() -> list[str]:
+    """The private folders (PLAN4 7.6)."""
+    return [r["path"] for r in policies() if r["private"]]
 
 
 # ---------------------------------------------------------------- drives

@@ -175,8 +175,13 @@ def init() -> None:
 
 
 def visit(path: str) -> None:
-    """Count a folder visit for frecency (section 6.1)."""
+    """Count a folder visit for frecency (section 6.1). A private folder (PLAN4 7.6) is not counted."""
     import time as _t
+
+    from .privacy.scope import is_private
+
+    if is_private(path):
+        return
 
     with tx() as c:
         c.execute(

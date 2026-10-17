@@ -244,6 +244,15 @@ _OS_ERRORS = {  # errno name -> (status, message). PLAN2 P2-9: shares refuse thi
 }
 
 
+from .privacy.scope import PrivateError  # noqa: E402
+
+
+@app.exception_handler(PrivateError)
+async def private_error(_: Request, e: PrivateError):
+    """An AI feature met a private folder (PLAN4 7.6)."""
+    return JSONResponse({"error": str(e), "code": "private"}, status_code=403)
+
+
 @app.exception_handler(OSError)
 async def os_error(_: Request, e: OSError):
     import errno as errno_
@@ -624,27 +633,26 @@ def fs_raw(path: str):
     return FileResponse(path)
 
 
-def _thumb(path: str, px: int) -> Path | None:
+def _thumb(path: str, px: int) -> Path | bytes | None:
+    """A WebP thumbnail in the cache. A file in a private folder (PLAN4 7.6) gets its thumbnail in memory only:
+    no copy of it stays in the data folder."""
+    from .privacy.scope import is_private
+
     st = os.stat(path)
-    key = hashlib.sha1(f"{path}|{st.st_mtime_ns}|{st.st_size}|{px}".encode()).hexdigest()
-    out = THUMB_DIR / f"{key}.webp"
-    if out.exists():
+    private = is_private(path)
+    out = config.thumb_file(path, st, px)
+    if not private and out.exists():
         return out
     ext = ext_of(path)
     from PIL import Image
 
     if ext == "pdf":
-        import pymupdf
+        from . import pdf
 
-        from .pdflock import LOCK
-
-        with LOCK, pymupdf.open(path) as doc:
-            if doc.page_count == 0:
+        with pdf.open_pdf(path) as doc:
+            if len(doc) == 0:
                 return None
-            page = doc[0]
-            zoom = px / max(page.rect.width, page.rect.height)
-            pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
-            img = Image.open(io.BytesIO(pix.tobytes("png")))
+            img = pdf.render_fit(doc[0], px)
     elif ext in IMAGE_EXTS and ext not in ("svg", "heic", "jxl"):
         img = Image.open(path)
         img.draft("RGB", (px, px))
@@ -653,11 +661,15 @@ def _thumb(path: str, px: int) -> Path | None:
     img.thumbnail((px, px))
     if img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGBA")
+    if private:
+        buf = io.BytesIO()
+        img.save(buf, "WEBP", quality=78)
+        return buf.getvalue()
     img.save(out, "WEBP", quality=78)
     return out
 
 
-def _thumb_keep_atime(path: str, px: int) -> Path | None:
+def _thumb_keep_atime(path: str, px: int) -> Path | bytes | None:
     from .fs.atime import keep_atime
 
     with keep_atime(path):
@@ -674,6 +686,8 @@ async def fs_thumb(path: str, size: int = 256):
         out = None
     if out is None:
         return Response(status_code=204)
+    if isinstance(out, bytes):
+        return Response(out, media_type="image/webp", headers={"Cache-Control": "no-store"})
     return FileResponse(out, media_type="image/webp", headers={"Cache-Control": "max-age=86400"})
 
 
@@ -1185,6 +1199,7 @@ class PolicyBody(BaseModel):
     protect: bool | None = None
     no_compress: bool | None = None
     full_index: bool | None = None
+    private: bool | None = None
 
 
 @app.post("/fs/policies")
@@ -1193,7 +1208,11 @@ def fs_policy(b: PolicyBody):
 
     flags = {k: v for k, v in b.model_dump().items() if k != "path" and v is not None}
     out = props.set_policy(b.path, **flags)
-    if "no_index" in flags or "full_index" in flags:
+    if flags.get("private"):
+        from .privacy import scope
+
+        out["forgot"] = scope.forget(out["path"])  # PLAN4 7.6: no AI data about the folder stays
+    if "no_index" in flags or "full_index" in flags or "private" in flags:
         indexer.roots_changed()  # a rescan drops (or adds) the folder's files
     return out
 

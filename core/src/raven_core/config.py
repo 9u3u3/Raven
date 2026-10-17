@@ -32,6 +32,14 @@ DB_PATH = DATA_DIR / "raven.db"
 THUMB_DIR = private_dir(DATA_DIR / "thumbs")
 
 
+def thumb_file(path: str, st: os.stat_result, px: int) -> Path:
+    """The cache file of a thumbnail: the path, the change time, the size and the pixel size make the key."""
+    import hashlib
+
+    key = hashlib.sha1(f"{path}|{st.st_mtime_ns}|{st.st_size}|{px}".encode()).hexdigest()
+    return THUMB_DIR / f"{key}.webp"
+
+
 def protect_data_files() -> None:
     """Mode 0600 for the database files that older versions made with 0644."""
     if os.name == "nt":

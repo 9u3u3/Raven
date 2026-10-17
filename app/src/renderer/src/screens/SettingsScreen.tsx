@@ -2,7 +2,7 @@ import { Cloud, Cpu, FolderSearch, Folder, HelpCircle, KeyRound, Keyboard, Lock,
 import { useEffect, useRef, useState } from 'react'
 import { get, post } from '../lib/api'
 import { size, tildify } from '../lib/format'
-import { FONTS, POLICY_NAMES, loadPolicies, refreshPrivacy, say, setPref, togglePolicy, useApp, type Font } from '../store'
+import { FONTS, POLICY_NAMES, loadPolicies, refreshPrivacy, say, setPref, setPrivate, togglePolicy, useApp, type Font } from '../store'
 import KeyField from '../components/KeyField'
 import ClaudeAccount from '../components/ClaudeAccount'
 import FeaturePicker, { DeviceLine, useFeatures } from '../components/FeaturePicker'
@@ -52,6 +52,35 @@ function FolderRules() {
           ))}
         </div>
       ))}
+    </div>
+  )
+}
+
+/** Private folders (PLAN4 7.6): no AI and no model reads them. Raven works on them as a plain file manager. */
+function PrivateFolders() {
+  const policies = useApp((s) => s.policies)
+  const home = useApp((s) => s.places?.home ?? '')
+  useEffect(() => void loadPolicies(), [])
+  const own = policies.filter((p) => p.private)
+  return (
+    <div>
+      <div className="mb-4">
+        {own.length === 0 && <p className="py-2 text-muted">No private folders.</p>}
+        {own.map((p, k) => (
+          <div key={p.path} style={stagger(k)} className="anim-row group flex items-center gap-3 border-b border-line/70 py-2.5 transition-colors hover:bg-hover">
+            <Lock size={15} strokeWidth={1.5} className="text-muted" />
+            <span className="mono flex-1 truncate" title={p.path}>
+              {tildify(p.path, home)}
+            </span>
+            <button className="link text-muted opacity-0 transition-all hover:text-danger group-hover:opacity-100" title="Let Raven's AI read this folder again" onClick={() => setPrivate(p.path, false)}>
+              remove
+            </button>
+          </div>
+        ))}
+      </div>
+      <button className="btn-primary" onClick={() => void pickFolder('A private folder').then((ps) => ps[0] && setPrivate(ps[0], true))}>
+        Add a private folder
+      </button>
     </div>
   )
 }
@@ -460,6 +489,7 @@ export default function SettingsScreen() {
     ['security', 'Encryption', Lock],
     ['performance', 'Performance', Cpu],
     ['power', 'Power user', ShieldAlert],
+    ['private', 'Private folders', Lock],
     ['rules', 'Folder rules', ShieldAlert],
     ['shortcuts', 'Shortcuts', Keyboard],
     ['help', 'Help', HelpCircle]
@@ -672,6 +702,15 @@ export default function SettingsScreen() {
               <Switch on={!!settings.index_code} label="Read code projects" onChange={(v) => void setSetting('index_code', v)} />
             </Row>
             <UpdateRow on={!!settings.update_check} onChange={(v) => void setSetting('update_check', v)} />
+          </Section>
+
+          <Section
+            id="private"
+            i={8}
+            title="Private folders"
+            text="No AI and no model reads a private folder, local or cloud. Raven does not index it, search its content, summarize it, organize it, name its files or learn from it. Photos, videos and audio never go to a cloud AI, in any folder."
+          >
+            <PrivateFolders />
           </Section>
 
           <Section id="rules" i={8} title="Folder rules">

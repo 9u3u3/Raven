@@ -20,6 +20,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..privacy.scope import is_private
 from .. import db
 from ..compress import jobs as compress_jobs
 from ..convert import registry as conv
@@ -127,9 +128,10 @@ class Context:
         if any(p == d or p.startswith(d + "/") for d in SYSTEM_DIRS) and not p.startswith(self.home + "/") and not user_share:
             return False
         from ..storage.protect import user_protected
+        from ..privacy.scope import is_private
 
-        if user_protected(p):
-            return False  # a folder rule (PLAN2 P2-5)
+        if user_protected(p) or is_private(p):
+            return False  # a folder rule (PLAN2 P2-5), or a private folder (PLAN4 7.6)
         bases = [*index_roots(), self.cwd, *self.named, *[os.path.dirname(s) for s in self.selection]]
         return any(p == b or p.startswith(b.rstrip("/") + "/") for b in bases if b)
 
@@ -204,7 +206,8 @@ def _below(base: str, name: str, depth: int = 3, budget: int = 2000) -> str | No
         for d in level:
             try:
                 subs = sorted(e.path for e in os.scandir(d) if e.is_dir(follow_symlinks=False)
-                              and not e.name.startswith(".") and e.name not in ("node_modules", "__pycache__"))
+                              and not e.name.startswith(".") and e.name not in ("node_modules", "__pycache__")
+                              and not is_private(e.path))
             except OSError:
                 continue
             for p in subs:
@@ -279,13 +282,14 @@ def _find(st: dict, ctx: Context) -> list[Item]:
     if not types:
         # "everything in X": the items directly in the folder.
         for de in sorted(os.scandir(folder), key=lambda d: d.name.lower()):
-            if de.name.startswith("."):
+            if de.name.startswith(".") or is_private(de.path):
                 continue
             out.append(Item(de.path, de.path, _size(de.path), de.is_dir(follow_symlinks=False)))
         return out
     base_depth = folder.rstrip("/").count("/")
     for dp, dns, fns in os.walk(folder):
-        dns[:] = sorted(d for d in dns if not d.startswith(".") and d not in ("node_modules", "__pycache__"))
+        dns[:] = sorted(d for d in dns if not d.startswith(".") and d not in ("node_modules", "__pycache__")
+                        and not is_private(os.path.join(dp, d)))
         if dp.count("/") - base_depth >= FIND_DEPTH:
             dns[:] = []
         for fn in sorted(fns):
@@ -488,6 +492,8 @@ def resolve(abstract: list[dict], ctx: Context, tier: str, planner: str, ms: int
     for s in steps:
         for i in s.items:
             for p in (i.src, i.dst):
+                if p and is_private(p):
+                    raise PlanError(f"{os.path.basename(p)} is in a private folder. The agent does not touch it.")
                 if p and not ctx.allowed(p):
                     raise PlanError(f"{p} is outside the indexed folders and the folders that the command names")
     if sum(len(s.items) for s in steps if s.op not in ("find", "selection")) > MAX_FILES:

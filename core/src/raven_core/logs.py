@@ -79,7 +79,7 @@ def setup(level: int = logging.INFO) -> None:
 
     threading.excepthook = on_thread_error
     sys.excepthook = on_error
-    # A crash in native code (PyMuPDF, onnxruntime) prints the Python stack of every thread to crash.log.
+    # A crash in native code (PDFium, onnxruntime) prints the Python stack of every thread to crash.log.
     try:
         import faulthandler
 

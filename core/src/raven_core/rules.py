@@ -157,7 +157,10 @@ def run_rule(rule: dict, existing: bool = False) -> dict:
                     ops.move([path], rule["target"], "keep_both", "rule", group=g)
                 elif rule["action"] == "name":
                     from . import naming
+                    from .privacy.scope import is_private
 
+                    if is_private(path):
+                        continue  # a private folder (PLAN4 7.6): no model names its files
                     row = db.conn().execute("SELECT id, title, category, mtime, index_stage FROM files WHERE path=?",
                                             (path,)).fetchone()
                     if (row is None or (row["index_stage"] or 0) < 2) and now - st.st_mtime < NAME_WAIT:

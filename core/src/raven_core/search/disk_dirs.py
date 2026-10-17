@@ -105,6 +105,8 @@ class DiskDirs:
         return tops
 
     def scan(self) -> None:
+        from ..privacy.scope import is_private
+
         t0 = time.perf_counter()
         self.scanning = True
         paths: list[str] = []
@@ -126,8 +128,8 @@ class DiskDirs:
                                 if de.name.startswith(".") or de.name in SKIP:
                                     continue
                                 try:
-                                    if de.is_dir(follow_symlinks=False):
-                                        subdirs.append(de.path)
+                                    if de.is_dir(follow_symlinks=False) and not is_private(de.path):
+                                        subdirs.append(de.path)  # a private folder (PLAN4 7.6) is not found
                                 except OSError:
                                     continue
                     except OSError:

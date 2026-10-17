@@ -95,8 +95,15 @@ class Redactor:
         return "".join(out)
 
 
+# Binary data in a payload: a data URL, or a long base64 run (a photo, a video frame, a file). PLAN4 7.6: no
+# photo, video or audio goes to a cloud AI, so the gate blocks these even when a caller forgets the rule.
+BINARY = re.compile(r"data:[\w.+-]+/[\w.+-]+;base64,|[A-Za-z0-9+/]{512,}={0,2}")
+
+
 def final_check(text: str) -> tuple[bool, str]:
-    """Step 6: scan the redacted payload again. Block on any high-risk entity."""
+    """Step 6: scan the redacted payload again. Block on binary data and on any high-risk entity."""
+    if BINARY.search(text):
+        return True, "the payload holds binary data (a photo, a video or a file)"
     left = [s for s in detect(PLACEHOLDER.sub("", text)) if s.type in HIGH_RISK]
     if left:
         return True, f"{len(left)} high-risk item{'s' if len(left) != 1 else ''} ({', '.join(sorted({s.type for s in left}))}) left after redaction"

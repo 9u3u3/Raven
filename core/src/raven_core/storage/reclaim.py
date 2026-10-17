@@ -831,12 +831,10 @@ def _pcm_md5(path: str) -> str | None:
 
 
 def _pdf_text(path: str) -> list[str]:
-    import pymupdf
+    from .. import pdf
 
-    from ..pdflock import LOCK
-
-    with LOCK, pymupdf.open(path) as d:
-        return [p.get_text() for p in d]
+    with pdf.open_pdf(path) as d:
+        return [pdf.page_text(p) for p in d]
 
 
 def optimize_one(path: str, g: ops.Group) -> int | None:
@@ -859,14 +857,17 @@ def optimize_one(path: str, g: ops.Group) -> int | None:
                 r = subprocess.run(["jpegtran", "-optimize", "-copy", "all", "-outfile", tmp, path], capture_output=True, timeout=120)
                 same = r.returncode == 0 and _same_pixels(path, tmp)
             elif ext == "pdf":
-                import pymupdf
+                # pikepdf (qpdf, MPL-2.0) writes only the objects in use, with compressed streams.
+                import pikepdf
 
-                from ..pdflock import LOCK
-
-                with LOCK, pymupdf.open(path) as d:
-                    if d.needs_pass or d.is_encrypted:
-                        return None
-                    d.save(tmp, garbage=4, deflate=True, clean=True)
+                try:
+                    with pikepdf.open(path) as d:
+                        if d.is_encrypted:
+                            return None
+                        d.save(tmp, compress_streams=True, recompress_flate=True,
+                               object_stream_mode=pikepdf.ObjectStreamMode.generate)
+                except pikepdf.PasswordError:
+                    return None
                 same = _pdf_text(path) == _pdf_text(tmp)
             elif ext == "wav":
                 r = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", path, "-map", "0", "-c:a", "flac",

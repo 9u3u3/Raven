@@ -160,6 +160,9 @@ class TranscribeJob:
         lang = None
         error = None
         try:
+            from ..privacy.scope import require_ai
+
+            require_ai(r["path"])  # a private folder (PLAN4 7.6): the speech model never opens it
             if r["ext"] in AUDIO_EXTS or has_audio(r["path"]):
                 with keep_atime(r["path"]):
                     audio = _pcm(r["path"])

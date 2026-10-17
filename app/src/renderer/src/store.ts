@@ -1040,8 +1040,10 @@ export async function nameFiles(path?: string): Promise<void> {
 
 // ---------------------------------------------------------------- granular control (PLAN2 P2-5)
 
-export type Policy = { path: string; no_index: number; no_cloud: number; protect: number; no_compress: number; full_index: number }
+export type Policy = { path: string; no_index: number; no_cloud: number; protect: number; no_compress: number; full_index: number; private: number }
 export const POLICY_NAMES: [keyof Omit<Policy, 'path'>, string][] = [
+  // PLAN4 7.6: no AI and no model reads the folder. It is a plain folder.
+  ['private', 'Private: no AI'],
   ['no_index', 'Not indexed'],
   ['no_cloud', 'Never to the cloud'],
   ['protect', 'Raven never changes it'],
@@ -1060,9 +1062,38 @@ export async function loadPolicies(): Promise<void> {
 
 export async function togglePolicy(path: string, key: keyof Omit<Policy, 'path'>): Promise<void> {
   const cur = st().policies.find((p) => p.path === path)
+  if (key === 'private' && !cur?.private) {
+    setPrivate(path, true)
+    return
+  }
   await post('/fs/policies', { path, [key]: !cur?.[key] })
   await loadPolicies()
   say(`${POLICY_NAMES.find(([k]) => k === key)?.[1]}: ${cur?.[key] ? 'off' : 'on'} for ${basename(path)}`)
+}
+
+/** A private folder (PLAN4 7.6): Raven's AI and models never read it. Turning it on deletes what Raven knows of it. */
+export function setPrivate(path: string, on: boolean): void {
+  const run = async (): Promise<void> => {
+    try {
+      await post('/fs/policies', { path, private: on })
+      await loadPolicies()
+      say(on ? `${basename(path)} is private. Raven's AI does not read it.` : `${basename(path)} is not private now`)
+    } catch (e) {
+      say(`Could not change the folder: ${(e as Error).message}`)
+    }
+  }
+  if (!on) {
+    void run()
+    return
+  }
+  set({
+    confirm: {
+      title: 'Make the folder private',
+      body: `No AI and no model reads "${basename(path)}" or the files in it: no index, no search by content, no Ask, no agent, no photo or speech model. Raven deletes the index data, text, image data and thumbnails it has of the folder. The files stay as they are, and you open, copy and move them as usual.`,
+      action: 'Make private',
+      run: () => void run()
+    }
+  })
 }
 
 export async function makeLink(target: string, kind: 'symbolic' | 'hard'): Promise<void> {

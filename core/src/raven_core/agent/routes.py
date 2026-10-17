@@ -33,6 +33,11 @@ def _plan(b: PlanBody) -> dict:
     t0 = time.perf_counter()
     cwd = os.path.abspath(b.cwd or str(Path.home()))
     selection = [os.path.abspath(p) for p in b.selection]
+    from ..privacy.scope import is_private
+
+    # A private folder (PLAN4 7.6): the agent does not plan in it or for files in it.
+    if is_private(cwd) or any(is_private(p) for p in selection):
+        raise core.PlanError("This folder is private. Raven's agent does not read or change it.")
     try:
         fast = None if b.think_harder else grammar.parse(b.command)
     except grammar.OrganizeRequest as e:

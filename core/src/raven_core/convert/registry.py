@@ -59,10 +59,10 @@ ROUTES: list[Route] = [
     _r({"md", "markdown", "docx", "odt", "rst", "epub"}, "html", "pandoc"),
     _r({"html", "htm", "docx", "odt", "rst", "epub"}, "md", "pandoc", "Markdown"),
     _r({"md", "markdown", "html", "htm", "docx"}, "epub", "pandoc"),
-    _r({"pdf"}, "md", "pymupdf", "Markdown"),
-    _r({"pdf"}, "txt", "pymupdf", "Text"),
-    _r({"pdf"}, "png", "pymupdf", "PNG pages"),
-    _r({"pdf"}, "jpg", "pymupdf", "JPG pages"),
+    _r({"pdf"}, "md", "pdfium", "Markdown"),
+    _r({"pdf"}, "txt", "pdfium", "Text"),
+    _r({"pdf"}, "png", "pdfium", "PNG pages"),
+    _r({"pdf"}, "jpg", "pdfium", "JPG pages"),
     *[_r(IMAGES - {e}, e, "magick") for e in ("png", "jpg", "webp", "avif", "jxl", "tiff", "bmp")],
     _r(IMAGES, "pdf", "magick", "PDF"),
     *[_r((AUDIO | VIDEO) - {e}, e, "ffmpeg") for e in ("mp3", "wav", "ogg", "m4a")],
@@ -175,16 +175,14 @@ def _engine(route: Route, src: str, dst_ext: str) -> list[str] | dict:
             html = Path(inp).read_text(errors="replace")
         html = html.replace("</head>", f"<style>{_PRINT_CSS}</style><base href=\"file://{os.path.dirname(src)}/\"></head>", 1)
         return {"html": html, "out": _out(src, "pdf"), "src": src}
-    if route.engine == "pymupdf":
-        import pymupdf
+    if route.engine == "pdfium":
+        from .. import pdf
 
-        from ..pdflock import LOCK
-
-        with LOCK, pymupdf.open(inp) as doc:
+        with pdf.open_pdf(inp) as doc:
             if dst_ext in ("md", "txt"):
                 parts = []
                 for i, page in enumerate(doc):
-                    text = page.get_text("text", sort=True).strip()
+                    text = pdf.page_text(page).strip()
                     parts.append((f"## Page {i + 1}\n\n" if dst_ext == "md" else f"--- page {i + 1} ---\n") + text)
                 out = _out(src, dst_ext)
                 Path(out).write_text("\n\n".join(parts) + "\n")
@@ -192,8 +190,7 @@ def _engine(route: Route, src: str, dst_ext: str) -> list[str] | dict:
             folder = ops.unique_path(str(Path(src).with_name(Path(src).stem + " pages")))
             os.mkdir(folder)
             for i, page in enumerate(doc):
-                pix = page.get_pixmap(dpi=150, alpha=False)
-                pix.save(os.path.join(folder, f"page-{i + 1:03d}.{dst_ext}"))
+                pdf.render(page, 150 / 72).save(os.path.join(folder, f"page-{i + 1:03d}.{dst_ext}"))
             return [folder]
     if route.engine == "magick":
         _need("magick")
@@ -259,7 +256,7 @@ def convert(paths: list[str], target: str, combine: bool = False, source: str = 
             except (ConvertError, OSError, subprocess.TimeoutExpired) as e:
                 errors.append({"path": p, "error": str(e)})
                 continue
-            except Exception as e:  # noqa: BLE001 - pandas and PyMuPDF raise their own types
+            except Exception as e:  # noqa: BLE001 - pandas and PDFium raise their own types
                 errors.append({"path": p, "error": f"{type(e).__name__}: {e}"})
                 continue
             if isinstance(res, dict):

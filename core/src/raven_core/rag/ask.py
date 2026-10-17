@@ -171,11 +171,16 @@ def _ask(question: str, think: bool, consent: bool, history: list[dict], local_o
     heavy = think or (want_cloud and files >= 4)
     tier, reason = "T3", ""
     from ..fs.props import policy_for
+    from ..privacy.scope import is_media
 
+    sources = [s for s in sources if not policy_for(s.path, "private")]  # an index from before the rule
     if not heavy:
         tier, reason = "T2", "a short question over a few sources runs on the local model"
     elif any(policy_for(s.path, "no_cloud") for s in sources):
         tier, reason = "T2", "a source is in a folder that never goes to the cloud"
+    elif any(is_media(s.path) for s in sources):
+        # PLAN4 7.6: text from a photo, a video or an audio file (OCR, a transcript) never goes to the cloud.
+        tier, reason = "T2", "a source is a photo, video or audio file, so the local model answers"
     elif mode == "local":
         tier, reason = "T2", "Local only mode"
     elif not providers:

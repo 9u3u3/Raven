@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_sub
 
 datas, binaries, hidden = [], [], []
 for pkg in ("sqlite_vec", "onnxruntime", "tokenizers", "faster_whisper", "ctranslate2", "magika", "markitdown",
-            "sqlcipher3", "pymupdf", "keyring",
+            "sqlcipher3", "pypdfium2", "pypdfium2_raw", "pikepdf", "keyring",
             "model2vec", "safetensors"):  # model2vec: lite mode (PLAN2 P2-6)
     d, b, h = collect_all(pkg)
     datas += d

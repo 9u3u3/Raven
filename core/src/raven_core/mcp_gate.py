@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
+from .privacy.scope import is_media, is_private
 from . import db
 from .privacy import gate
 
@@ -109,8 +110,9 @@ def search(q: str, limit: int) -> dict:
 
     for r in res["results"]:
         if policy_for(r["path"], "no_cloud"):
-            continue  # a folder rule: an MCP client is an AI outside Raven
-        snippet = "".join(s["t"] for s in r.get("snippet") or [])
+            continue  # a folder rule (private counts too): an MCP client is an AI outside Raven
+        # No text from a photo, a video or an audio file (OCR, a transcript) leaves Raven (PLAN4 7.6).
+        snippet = "" if is_media(r["path"]) else "".join(s["t"] for s in r.get("snippet") or [])
         rows.append({
             "path": _path_out(r["path"], red), "kind": r["kind"], "why": r["why"],
             "page": r.get("page"), "size": r.get("size"), "snippet": red.redact(snippet) if snippet else "",
@@ -132,6 +134,8 @@ def ask(question: str) -> dict:
             raise HTTPException(502, e.get("message") or "Ask failed")
     if any(_no_cloud(s["path"]) for s in sources):
         raise HTTPException(403, "The answer uses files in a folder that a folder rule keeps away from AI outside Raven.")
+    if any(is_media(s["path"]) for s in sources):
+        raise HTTPException(403, "The answer uses a photo, video or audio file. Raven does not share them with an AI outside Raven.")
     red = gate.Redactor()
     return _send("ask", {
         "question": question,
@@ -148,6 +152,8 @@ def read(path: str, max_chars: int) -> dict:
     p = _in(path)
     if not os.path.isfile(p):
         raise HTTPException(404, "No such file")
+    if is_media(p):
+        raise HTTPException(403, "Raven does not share photos, videos or audio with an AI outside Raven.")
     row = db.conn().execute("SELECT category FROM files WHERE path=?", (p,)).fetchone()
     if row and row[0] == "Secret":
         raise HTTPException(403, "This file holds passwords or keys. Raven does not share it.")
@@ -164,8 +170,9 @@ def list_folder(path: str) -> dict:
     p = _in(path)
     res = listing.list_dir(p, hidden=False)
     red = gate.Redactor()
+    entries = [e for e in res["entries"] if not is_private(os.path.join(p, e["name"]))]
     items = [{"name": red.redact(e["name"], name=True), "folder": e["is_dir"], "size": e["size"], "kind": e["kind"]}
-             for e in sorted(res["entries"], key=lambda e: (not e["is_dir"], e["name"].lower()))[:300]]
+             for e in sorted(entries, key=lambda e: (not e["is_dir"], e["name"].lower()))[:300]]
     return _send("list", {"path": _path_out(p, red), "items": items}, red)
 
 

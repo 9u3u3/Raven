@@ -215,15 +215,14 @@ _JUNK_TITLE = re.compile(r"^(untitled|microsoft word|document\d*|\S+\.(docx?|pdf
 def pdf_title(path: str) -> str:
     """The title of a PDF: the text in the largest font on page 1. Papers and forms often have no title in their
     metadata, and their first line is a header or a license note, not the title."""
-    import pymupdf
+    from .. import pdf
 
     try:
-        with pymupdf.open(path) as doc:
+        with pdf.open_pdf(path) as doc:
             if not len(doc):
                 return ""
-            # Horizontal lines only: arXiv prints its stamp in large rotated text along the margin.
-            spans = [(ln["bbox"][1], s["size"], s["text"]) for b in doc[0].get_text("dict")["blocks"] for ln in b.get("lines", [])
-                     if abs(ln.get("dir", (1, 0))[1]) < 0.01 for s in ln["spans"] if sum(ch.isalpha() for ch in s["text"]) >= 3]
+            # Horizontal lines only (text_runs): arXiv prints its stamp in large rotated text along the margin.
+            spans = [(y, size, text) for y, size, text in pdf.text_runs(doc[0]) if sum(ch.isalpha() for ch in text) >= 3]
     except Exception:  # noqa: BLE001 - a broken PDF has no title
         return ""
     if not spans:
@@ -245,21 +244,21 @@ def pdf_title(path: str) -> str:
 
 @_pdf_locked
 def _pdf(path: str) -> Extracted:
-    import pymupdf
+    from .. import pdf
 
     out = Extracted()
-    with pymupdf.open(path) as doc:
-        out.title = (doc.metadata or {}).get("title") or ""
+    with pdf.open_pdf(path) as doc:
+        out.title = pdf.title(doc)
         scanned = 0
         for i, page in enumerate(doc):
-            text = page.get_text("text", sort=True).strip()
+            text = pdf.page_text(page).strip()
             if len(text) < 20 and scanned < OCR_PAGES and ocr_ok():
                 # A scanned page has no text layer: render it and read it with OCR.
                 scanned += 1
                 import tempfile
 
                 with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
-                    page.get_pixmap(dpi=200).save(tmp.name)
+                    pdf.render(page, 200 / 72).save(tmp.name)
                     text = ocr_image(tmp.name) or text
             if text:
                 out.sections.append(Section(text, i + 1))

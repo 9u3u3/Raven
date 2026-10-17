@@ -116,11 +116,14 @@ def suggest(root: str, mode: str = "both", think_harder: bool = False) -> OrgPla
         raise ValueError(f"Not a folder: {root}")
     if protect.user_protected(root):
         raise ValueError("A folder rule protects this folder. Raven does not reorganize it.")
+    from .privacy.scope import is_private, require_ai
+
+    require_ai(root)  # a private folder (PLAN4 7.6)
     if protect.is_project_root(root) or protect.is_software_dir(root):
         raise ValueError("This folder is a project or holds software. Raven does not reorganize it, because tools depend on its layout.")
     files = _loose_files(root)
     rows = _rows(root)
-    existing = {d.name.lower(): d.name for d in os.scandir(root) if d.is_dir()}
+    existing = {d.name.lower(): d.name for d in os.scandir(root) if d.is_dir() and not is_private(d.path)}
     skipped: list[dict] = []
     picks: dict[str, tuple[str | None, str, str | None]] = {}  # name -> (folder, reason, category)
     tier, planner = "rules", "categories"
@@ -225,7 +228,9 @@ def _model_plan(root: str, files: list[os.DirEntry], rows: dict[str, dict]) -> t
     big = len(files) >= SMALL
     providers = core.provider_order("folder_summary") if core.ai_mode() != "local" and not policy_for(root, "no_cloud") else []
     red = gate.Redactor() if (big and providers) else None
-    subs = sorted(d.name for d in os.scandir(root) if d.is_dir() and not d.name.startswith("."))
+    from .privacy.scope import is_private
+
+    subs = sorted(d.name for d in os.scandir(root) if d.is_dir() and not d.name.startswith(".") and not is_private(d.path))
 
     def r(x: str) -> str:
         return red.redact(x, name=True) if red else x

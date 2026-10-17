@@ -28,6 +28,8 @@ class RunBody(BaseModel):
 async def run(b: RunBody):
     try:
         return await run_in_threadpool(core.run, b.task, b.path, b.think_harder, b.consent)
+    except PermissionError as e:
+        raise HTTPException(403, str(e)) from e
     except (ValueError, local.LocalError) as e:
         raise HTTPException(400, str(e)) from e
 

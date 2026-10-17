@@ -129,17 +129,13 @@ from ..pdflock import locked as _pdf_locked
 
 @_pdf_locked
 def _page_images(path: str) -> list[tuple[float, object, str]]:
-    import pymupdf
-    from PIL import Image
+    from .. import pdf
 
     out = []
     key = hashlib.sha1(path.encode()).hexdigest()[:16]
-    with pymupdf.open(path) as doc:
-        for i in range(min(doc.page_count, MAX_PAGES)):
-            page = doc[i]
-            zoom = 448 / max(page.rect.width, page.rect.height, 1)
-            pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
-            img = Image.open(io.BytesIO(pix.tobytes("png")))
+    with pdf.open_pdf(path) as doc:
+        for i in range(min(len(doc), MAX_PAGES)):
+            img = pdf.render_fit(doc[i], 448)
             thumb = PAGE_DIR / f"{key}_{i + 1}.webp"
             img.save(thumb, "WEBP", quality=75)
             out.append((float(i + 1), img, str(thumb)))
@@ -267,6 +263,9 @@ class VisualJob:
         items: list[tuple[float | None, object, str | None]] = []
         error = None
         try:
+            from ..privacy.scope import require_ai
+
+            require_ai(path)  # a private folder (PLAN4 7.6): the photo model never opens it
             with keep_atime(path):
                 if kind == "image":
                     if r["size"] <= MAX_IMAGE:

@@ -344,8 +344,11 @@ def scan(root: str | None = None, use_llm: bool = True, limit: int = 2000) -> di
     """A rename plan for every file with a generic name below `root` (or in the whole index)."""
     t0 = time.perf_counter()
     c = db.conn()
+    from .privacy.scope import is_private, require_ai
+
     if root:
         root = os.path.abspath(root)
+        require_ai(root)  # a private folder (PLAN4 7.6)
         if os.path.isfile(root):
             rows = c.execute("SELECT id, path, name, title, category, mtime FROM files WHERE path=?", (root,)).fetchall()
             force = True
@@ -361,6 +364,7 @@ def scan(root: str | None = None, use_llm: bool = True, limit: int = 2000) -> di
         force = False
     from .storage import protect
 
+    rows = [r for r in rows if not is_private(r["path"])]  # rows from before the rule
     st = style()
     items, taken = [], set()
     for r in rows:

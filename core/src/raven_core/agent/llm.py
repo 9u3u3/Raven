@@ -67,7 +67,9 @@ def _context(cwd: str, selection: list[str], red: gate.Redactor | None) -> str:
         return red.redact(x, name=True) if red else x
     lines = [f"Folder in view: {r(os.path.basename(cwd) or cwd)}"]
     try:
-        subs = sorted(d.name for d in os.scandir(cwd) if d.is_dir() and not d.name.startswith("."))[:40]
+        from ..privacy.scope import is_private
+
+        subs = sorted(d.name for d in os.scandir(cwd) if d.is_dir() and not d.name.startswith(".") and not is_private(d.path))[:40]
     except OSError:
         subs = []
     if subs:

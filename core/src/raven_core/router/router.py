@@ -64,8 +64,10 @@ def build_folder_payload(path: str, red: gate.Redactor | None) -> tuple[str, int
     if not rows:
         # Not indexed: list the folder directly (names only).
         rows = []
+        from ..privacy.scope import is_private
+
         for dp, dns, fns in os.walk(path):
-            dns[:] = [d for d in dns if not d.startswith(".")]
+            dns[:] = [d for d in dns if not d.startswith(".") and not is_private(os.path.join(dp, d))]
             for fn in fns[:80]:
                 p = os.path.join(dp, fn)
                 try:
@@ -84,9 +86,13 @@ def build_folder_payload(path: str, red: gate.Redactor | None) -> tuple[str, int
         month = time.strftime("%Y-%m", time.localtime(r["mtime"] or 0))
         lines.append(f"- {rel} | {kind_of(r['name'], False)} | {_human(r['size'])} | modified {month}")
     samples = []
+    from ..privacy.scope import cloud_allowed
+
     for r in rows:
         if r["id"] is None or len(samples) >= 12:
             continue
+        if red and not cloud_allowed(r["path"]):
+            continue  # a cloud payload holds no text from photos, videos or audio (PLAN4 7.6)
         ch = c.execute("SELECT id, text FROM chunks WHERE file_id=? ORDER BY id LIMIT 1", (r["id"],)).fetchone()
         if not ch:
             continue
@@ -142,6 +148,9 @@ def run(task: str, path: str, think_harder: bool = False, consent: bool = False)
 def _run(task: str, path: str, think_harder: bool = False, consent: bool = False) -> dict:
     if task not in HEAVY_TASKS:
         raise ValueError(f"Unknown task {task}")
+    from ..privacy import scope
+
+    scope.require_ai(path)  # a private folder (PLAN4 7.6): no summary, local or cloud
     t0 = time.perf_counter()
     mode = ai_mode()
     heavy = think_harder or _file_count(path) >= HEAVY_FOLDER_FILES

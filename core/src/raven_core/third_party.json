@@ -387,6 +387,12 @@
    "source": "https://pandas.pydata.org"
   },
   {
+   "name": "pikepdf",
+   "version": "10.17.0",
+   "license": "MPL-2.0",
+   "source": "https://pikepdf.readthedocs.io/"
+  },
+  {
    "name": "pillow",
    "version": "12.3.0",
    "license": "MIT-CMU",
@@ -435,10 +441,10 @@
    "source": "https://github.com/jpadilla/pyjwt"
   },
   {
-   "name": "pymupdf",
-   "version": "1.28.2",
-   "license": "Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial License",
-   "source": "https://pymupdf.readthedocs.io/"
+   "name": "pypdfium2",
+   "version": "5.14.0",
+   "license": "BSD-3-Clause, Apache-2.0, dependency licenses",
+   "source": "https://github.com/pypdfium2-team/pypdfium2"
   },
   {
    "name": "python-dateutil",

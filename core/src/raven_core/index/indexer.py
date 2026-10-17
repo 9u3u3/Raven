@@ -124,6 +124,13 @@ def _skip_dir(path: str) -> bool:
     return protect.is_project_root(path) and not _full(path)
 
 
+def _private(path: str) -> bool:
+    """A private folder (PLAN4 7.6): not even its name goes into the index."""
+    from ..privacy.scope import is_private
+
+    return is_private(path)
+
+
 def _inside_skipped(path: str, root: str) -> bool:
     cur = os.path.dirname(path)
     root = root.rstrip("/")
@@ -335,7 +342,7 @@ class Indexer:
     def roots_changed(self) -> None:
         with db.tx() as c:
             current = roots()
-            stale = [r[0] for r in c.execute("SELECT DISTINCT root FROM files") if r[0] not in current]
+            stale = [r[0] for r in c.execute("SELECT DISTINCT root FROM files") if r[0] and r[0] not in current]
             for r in stale:
                 _remove_paths(c, [r])
                 c.execute("DELETE FROM files WHERE root=?", (r,))
@@ -381,7 +388,7 @@ class Indexer:
 
         db_cache.index_code = bool(db.get_setting("index_code", False))
         # Each stack item: a folder, and whether it lies in a names-only folder (a project or software).
-        stack: list[tuple[str, bool]] = [(root, False)]
+        stack: list[tuple[str, bool]] = [] if _private(root) else [(root, False)]
         while stack and not self.stop.is_set():
             d, light = stack.pop()
             try:
@@ -399,6 +406,8 @@ class Indexer:
                         continue
                     if de.is_symlink():
                         continue
+                    if _private(de.path):
+                        continue  # not in `seen`: rows from before the rule go below
                     seen.add(de.path)
                     if is_dir and _skip_dir(de.path):
                         # Kept as one names-only folder. Raven does not list its contents.
@@ -443,6 +452,9 @@ class Indexer:
             if root is None or p == root:
                 continue
             rel_parts = Path(p).relative_to(root).parts
+            if _private(p):
+                gone.append(p)  # a private folder keeps no row, also one from before the rule
+                continue
             if any(_skip_name(x) for x in rel_parts) or _inside_skipped(p, root):
                 continue
             try:
@@ -479,12 +491,15 @@ class Indexer:
             try:
                 with os.scandir(d) as it:
                     for de in it:
-                        if _skip_name(de.name) or de.is_symlink():
+                        if _skip_name(de.name) or de.is_symlink() or _private(de.path):
                             continue
                         try:
                             st = de.stat(follow_symlinks=False)
                             is_dir = de.is_dir(follow_symlinks=False)
                         except OSError:
+                            continue
+                        if is_dir and _skip_dir(de.path):
+                            batch.append(_row_for(de.path, root, st, True, True))  # names only, as in the walk
                             continue
                         batch.append(_row_for(de.path, root, st, is_dir))
                         if is_dir:
@@ -567,6 +582,8 @@ class Indexer:
     @staticmethod
     def _extract_one(row):
         try:
+            if _private(row["path"]):
+                return PermissionError("private folder")  # the rule came after the row: no text is read
             with keep_atime(row["path"]):
                 ex = extract(row["path"], row["ext"])
             name = row["name"]
