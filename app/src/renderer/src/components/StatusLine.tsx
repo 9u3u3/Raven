@@ -53,7 +53,7 @@ export default function StatusLine() {
   const privacy = useApp((s) => s.privacy)
   // Section 12.7: offline, the mode line says so, and heavy tasks run on the local model.
   const modeLabel =
-    privacy?.ai_mode === 'local' ? 'Local only' : privacy?.online === false ? 'LOCAL ONLY (offline)' : privacy?.ai_mode === 'ask' ? 'Ask each time' : 'Hybrid'
+    privacy?.ai_mode === 'local' ? 'Local only' : privacy?.online === false ? 'LOCAL ONLY (offline)' : 'Hybrid'
   const noRoots = index && !index.roots.length
   const jobs = useApp((s) => s.jobs)
   const live = Object.values(jobs).filter((j) => j.status === 'running' || j.status === 'paused')

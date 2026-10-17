@@ -15,13 +15,12 @@ router = APIRouter()
 class AskBody(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
     think_harder: bool = False
-    consent: bool = False
     history: list[dict] = []
 
 
 @router.post("/ask")
 def ask(b: AskBody):
-    return StreamingResponse(core.ask(b.question, b.think_harder, b.consent, b.history), media_type="application/x-ndjson")
+    return StreamingResponse(core.ask(b.question, b.think_harder, b.history), media_type="application/x-ndjson")
 
 
 @router.get("/ask/retrieve")

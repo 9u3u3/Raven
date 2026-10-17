@@ -83,7 +83,10 @@ See [Run it (development)](#run-it-development) for the optional tools and the t
   The file map by meaning is the second layout. The Inspector shows the links of one file.
 
 **Privacy**
-- AI modes: Local only, Hybrid, Ask each time. Offline, the mode line says `LOCAL ONLY (offline)`.
+- AI modes: Local only, Hybrid. Offline, the mode line says `LOCAL ONLY (offline)`.
+- Review before send: every cloud payload waits for you. You see what Raven hid, the words that may still be
+  private (from the local models and the local AI), and the exact text. You can hide more words, then send or
+  not. Send sends that exact text.
 - Two PII layers (patterns with checksums, and the OpenAI Privacy Filter), a redaction gate, and a ledger of every
   byte that leaves the laptop. The patterns cover India's IDs (Aadhaar, VID, PAN, GSTIN, passport, voter ID, driving
   licence, UAN, ABHA, ration card) and the types that apply everywhere (cards with CVV and expiry, IBAN, crypto
@@ -206,7 +209,7 @@ flowchart TB
      one install command for your Linux distribution.
 5. Choose the folders to index. Desktop, Documents, Downloads and Pictures are suggested. Home holds everything and
    takes long on a large disk.
-6. Choose the AI mode: Local only, Hybrid or Ask each time.
+6. Choose the AI mode: Local only or Hybrid. In Hybrid, you review each cloud payload before it goes.
 7. Optional: add a cloud provider and paste its key. **Groq**, **Google Gemini** and **OpenRouter** have free plans.
    **Anthropic** and **OpenAI** need a paid key. The test sends no file data. Keys stay on this computer, and the
    app never shows a stored key again (only `…` and the last 4 characters). You can change the providers and their

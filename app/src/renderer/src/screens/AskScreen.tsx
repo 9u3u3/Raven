@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import Payload from '../components/Payload'
 import { EmptyState } from '../components/EmptyState'
 import { FileIcon } from '../components/FileIcon'
 import { Chip, Ghost, SectionTitle, stagger } from '../components/ui'
@@ -142,22 +141,10 @@ function Section({ a }: { a: AskSection }) {
 
       {a.status === 'error' && <div className="anim-pop mb-4 border-l-2 border-danger py-1 pl-3 text-danger">{a.error}</div>}
 
-      {a.status === 'consent' && a.consent && (
-        <div className="anim-pop mb-6 border-l-2 border-accent pl-5">
-          <div className="serif mb-2 text-[16px] leading-none">Your approval is needed</div>
-          <p className="mb-2 text-muted">
-            Send to <b className="text-text">{providerName(a.consent.provider)}</b> · {a.consent.redacted} items redacted
-          </p>
-          <Payload text={a.consent.payload} className="mb-4 max-h-[46vh] overflow-auto rounded-[3px] bg-console-bg p-4 font-mono text-[11.5px] text-console-text" />
-          <div className="flex items-center gap-7">
-            <button className="btn-primary" onClick={() => void ask(a.question, { think: a.think, consent: true, replace: a.id, followUp: true })}>
-              Send ({size(new Blob([a.consent.payload]).size)})
-            </button>
-            <Ghost tone="plain" onClick={() => void ask(a.question, { replace: a.id, followUp: true })}>
-              Use the local model
-            </Ghost>
-          </div>
-        </div>
+      {a.status === 'review' && (
+        <p className="anim-pop mb-6 border-l-2 border-accent pl-5 text-muted">
+          Waiting for your review. Raven hid {a.redacted ?? 0} item{a.redacted === 1 ? '' : 's'}. Check the payload in the review window, then send it or let the local model answer.
+        </p>
       )}
 
       {a.status === 'done' && a.notFound && <p className="mb-3 text-muted">Not in your files.</p>}
@@ -180,7 +167,7 @@ function Section({ a }: { a: AskSection }) {
       )}
 
       </div>
-      {a.sources.length > 0 && a.status !== 'consent' && (
+      {a.sources.length > 0 && (
         <div className="min-w-0 min-[1100px]:sticky min-[1100px]:top-2 min-[1100px]:self-start">
           <SectionTitle>Sources · {a.sources.length}</SectionTitle>
           <ol>

@@ -195,7 +195,7 @@ export type CompressJob = {
 
 export type CompressSummary = { ghost: number; jobs: number; outputs: Record<string, number> }
 
-export type AiMode = 'local' | 'hybrid' | 'ask'
+export type AiMode = 'local' | 'hybrid'
 
 export type PrivacyStatus = {
   online?: boolean | null
@@ -234,7 +234,20 @@ export type RouterResult = {
   fallback: string | null
 }
 
-export type ConsentRequest = { needs_consent: true; payload: string; provider: string; redacted: number; entities: { type: string; placeholder: string }[] }
+/** A cloud payload that waits for the user (PLAN4 7.7, privacy/review.py). Values stay on this computer. */
+export type CloudReview = {
+  id: string
+  feature: string
+  providers: string[]
+  system: string
+  payload: string
+  bytes: number
+  items: { placeholder: string; type: string; value: string; layer: number | null; can_show: boolean }[]
+  suspects: { text: string; why: string; source: 'model' | 'pattern' | 'local AI' }[]
+  llm: 'off' | 'running' | 'done' | 'error'
+  created: number
+  wait_s: number
+}
 
 export type AskSource = { n: number; path: string; name: string; page: number | null; at?: number | null; heading: string; why: string; snippet: string }
 
@@ -258,7 +271,7 @@ export type AskSection = {
   id: number
   question: string
   think: boolean
-  status: 'retrieving' | 'streaming' | 'done' | 'error' | 'consent'
+  status: 'retrieving' | 'review' | 'streaming' | 'done' | 'error'
   sources: AskSource[]
   text: string
   tier?: 'T2' | 'T3' | 'none'
@@ -270,7 +283,6 @@ export type AskSection = {
   ms?: number
   notFound?: boolean
   fallback?: string | null
-  consent?: { payload: string; provider: string; redacted: number }
   error?: string
   started: number
 }

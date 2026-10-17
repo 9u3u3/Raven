@@ -15,10 +15,9 @@ type Check = {
   cloud: { groq: boolean; claude: boolean; anthropic: boolean; ai_mode: string }
 }
 
-const MODES: { id: 'local' | 'hybrid' | 'ask'; label: string; text: string }[] = [
+const MODES: { id: 'local' | 'hybrid'; label: string; text: string }[] = [
   { id: 'local', label: 'Local only', text: 'Nothing leaves this computer. Heavy questions are slower.' },
-  { id: 'hybrid', label: 'Hybrid', text: 'Cloud only after local redaction.' },
-  { id: 'ask', label: 'Ask each time', text: 'Raven shows each payload and waits for your OK before it sends it.' }
+  { id: 'hybrid', label: 'Hybrid', text: 'Cloud only after local redaction. Raven shows each payload and waits for your OK before it sends it.' }
 ]
 
 // The usual folders of a person's files. Home holds everything, and a large home folder takes hours to index.
@@ -57,7 +56,7 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
   const home = places?.home ?? ''
   const [check, setCheck] = useState<Check | null>(null)
   const [picked, setPicked] = useState<string[] | null>(null)
-  const [mode, setMode] = useState<'local' | 'hybrid' | 'ask'>('hybrid')
+  const [mode, setMode] = useState<'local' | 'hybrid'>('hybrid')
   const [busy, setBusy] = useState(false)
   const [phase, setPhase] = useState<'setup' | 'ready'>('setup')
   // The device check and the features (PLAN4 section 5.3): Raven ticks what runs well, the user may change it.
@@ -275,7 +274,7 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
         </Step>
 
         <Step n={3} k={7} title="AI mode">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             {MODES.map((x) => {
               const on = mode === x.id
               return (

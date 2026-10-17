@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from .. import config, db, lite
-from ..privacy import gate
+from ..privacy import gate, review
 from ..privacy.model import model as layer2
 from . import cloud, local
 from . import providers as registry
@@ -23,13 +23,12 @@ class RunBody(BaseModel):
     task: str
     path: str
     think_harder: bool = False
-    consent: bool = False
 
 
 @router.post("/router/run")
 async def run(b: RunBody):
     try:
-        return await run_in_threadpool(core.run, b.task, b.path, b.think_harder, b.consent)
+        return await run_in_threadpool(core.run, b.task, b.path, b.think_harder)
     except PermissionError as e:
         raise HTTPException(403, str(e)) from e
     except (ValueError, local.LocalError) as e:
@@ -57,6 +56,42 @@ def status():
         # Local only never checks: it makes no outbound connection at all.
         "online": None if core.ai_mode() == "local" else cloud.online(),
     }
+
+
+class ReviewUpdateBody(BaseModel):
+    id: str
+    hide: list[str] = []
+    show: list[str] = []
+
+
+class ReviewDecideBody(BaseModel):
+    id: str
+    send: bool
+
+
+@router.get("/privacy/reviews")
+def reviews():
+    """PLAN4 7.7: the payloads that wait for the user now."""
+    return {"reviews": review.pending()}
+
+
+@router.post("/privacy/review/update")
+def review_update(b: ReviewUpdateBody):
+    try:
+        return review.update(b.id, b.hide, b.show)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0])) from e
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@router.post("/privacy/review/decide")
+def review_decide(b: ReviewDecideBody):
+    try:
+        review.decide(b.id, b.send)
+    except KeyError as e:
+        raise HTTPException(404, str(e.args[0])) from e
+    return {"ok": True}
 
 
 @router.get("/privacy/ledger")

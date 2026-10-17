@@ -137,11 +137,11 @@ class Gliner:
         return {"input_ids": ids, "attention_mask": att, "words_mask": wm, "text_lengths": lengths,
                 "span_idx": np.ascontiguousarray(span_idx), "span_mask": span_mask}, [len(w) for w in windows]
 
-    def _decode(self, logits: np.ndarray, n: int) -> list[tuple[int, int, int, float]]:
+    def _decode(self, logits: np.ndarray, n: int, threshold: float) -> list[tuple[int, int, int, float]]:
         """Spans above the threshold, then greedy: the best score first, no two spans share a word."""
         probs = 1 / (1 + np.exp(-logits[:n]))
         found = []
-        for s, w, c in zip(*np.nonzero(probs > THRESHOLD)):
+        for s, w, c in zip(*np.nonzero(probs > threshold)):
             if s + w < n:
                 found.append((int(s), int(s + w), int(c), float(probs[s, w, c])))
         found.sort(key=lambda x: -x[3])
@@ -151,7 +151,8 @@ class Gliner:
                 keep.append(f)
         return keep
 
-    def detect(self, text: str) -> list[Span]:
+    def detect(self, text: str, threshold: float | None = None) -> list[Span]:
+        """`threshold`: a lower value gives the weak finds too (the cloud review shows them as suspicious words)."""
         if not text.strip():
             return []
         words = [(m.start(), m.end()) for m in WORD.finditer(text)]
@@ -170,7 +171,7 @@ class Gliner:
                 feeds, lens = self._feeds([w for _, w in part])
                 logits = self._sess.run(None, feeds)[0]
                 for (st, _), lg, n in zip(part, logits, lens):
-                    for a, b, c, p in self._decode(lg, n):
+                    for a, b, c, p in self._decode(lg, n, THRESHOLD if threshold is None else threshold):
                         s = Span(types[c], words[st + a][0], words[st + b][1], p, layer=2)
                         # A name has no digits: the model can read a code word such as BM25 as a name.
                         if not (s.type == "PERSON" and any(ch.isdigit() for ch in text[s.start:s.end])):

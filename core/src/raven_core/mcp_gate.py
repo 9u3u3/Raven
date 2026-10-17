@@ -124,7 +124,7 @@ def ask(question: str) -> dict:
     from .rag import ask as rag
 
     answer, sources, tier = "", [], None
-    for line in rag.ask(question, False, False, [], local_only=True):
+    for line in rag.ask(question, False, [], local_only=True):
         e = json.loads(line)
         if e["type"] == "token":
             answer += e["t"]

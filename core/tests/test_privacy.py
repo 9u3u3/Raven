@@ -9,7 +9,7 @@ os.environ.setdefault("RAVEN_DATA_DIR", os.path.join(_tmp, "data"))
 import pytest  # noqa: E402
 
 from raven_core import db  # noqa: E402
-from raven_core.privacy import gate, rules  # noqa: E402
+from raven_core.privacy import gate, review, rules  # noqa: E402
 from raven_core.router import cloud, local  # noqa: E402
 from raven_core.router import providers as registry  # noqa: E402
 from raven_core.router import router as core  # noqa: E402
@@ -77,6 +77,8 @@ def cloud_ready(monkeypatch):
     monkeypatch.setattr(registry, "chat", chat)
     monkeypatch.setattr(cloud, "online", lambda: True)
     monkeypatch.setattr(gate, "layer2_ready", lambda: None)
+    # The user presses Send in each review (PLAN4 7.7). tests/test_review.py tests the review itself.
+    monkeypatch.setattr(review, "confirm", lambda payload, red, feature, providers, system="": payload)
     return sent
 
 
@@ -104,12 +106,23 @@ def test_router_hybrid_think_harder_redacts(tmp_path, cloud_ready):
     assert row["payload"] == payload and "Rahul" not in row["payload"]
 
 
-def test_router_ask_each_time_needs_consent(tmp_path, cloud_ready):
+def test_router_sends_nothing_when_the_user_does_not_send(tmp_path, monkeypatch, cloud_ready):
     (tmp_path / "x.txt").write_text("hello")
-    db.set_setting("ai_mode", "ask")
+    db.set_setting("ai_mode", "ask")  # the old Ask each time mode is hybrid now, with a review for every call
+    seen = []
+
+    def no(payload, red, feature, providers, system=""):
+        seen.append((feature, str(payload)))
+        raise gate.Blocked(review.CANCELLED)
+
+    monkeypatch.setattr(review, "confirm", no)
+    monkeypatch.setattr(local, "available", lambda: True)
+    monkeypatch.setattr(local, "chat", lambda *a, **k: {"summary": "local", "points": []})
     before = len(gate.ledger_list())
     res = core.run("folder_summary", str(tmp_path), think_harder=True)
-    assert res["needs_consent"] and len(gate.ledger_list()) == before and not cloud_ready
+    assert seen and seen[0][0] == "Folder summary"
+    assert res["tier"] == "T2" and res["fallback"] == review.CANCELLED
+    assert len(gate.ledger_list()) == before and not cloud_ready
     db.set_setting("ai_mode", "hybrid")
 
 

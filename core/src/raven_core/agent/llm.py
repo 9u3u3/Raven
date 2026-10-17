@@ -11,7 +11,7 @@ import json
 import os
 import re
 
-from ..privacy import gate
+from ..privacy import gate, review
 from ..router import cloud, local
 from ..router import providers as registry
 from ..router import router as core
@@ -113,6 +113,10 @@ def plan_cloud(command: str, cwd: str, selection: list[str], providers: list[str
         payload = gate.seal(payload, red)
     except gate.Blocked as e:
         raise cloud.CloudError(f"the redaction gate blocked the request: {e}") from e
+    try:
+        payload = review.confirm(payload, red, "Agent plan", providers, SYSTEM)  # PLAN4 7.7
+    except gate.Blocked as e:
+        raise cloud.CloudError(str(e)) from e
     errors = []
     for prov in providers:
         lid = gate.ledger_write("agent plan", "T3", prov, SYSTEM + "\n\n" + payload, len(red.mapping))

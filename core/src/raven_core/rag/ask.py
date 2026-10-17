@@ -3,7 +3,7 @@
 The answer streams as NDJSON events:
   {"type": "sources", ...}   the numbered sources, the tier and the reason
   {"type": "token", "t": ...} a piece of the answer
-  {"type": "consent", ...}   Ask each time mode: the exact redacted payload, nothing sent yet
+  {"type": "review"}         the payload waits for the user's review (privacy/review.py), nothing sent yet
   {"type": "done", ...}      timings
   {"type": "error", ...}
 """
@@ -15,7 +15,7 @@ import re
 import time
 from collections.abc import Iterator
 
-from ..privacy import gate
+from ..privacy import gate, review
 from ..router import cloud, local
 from ..router import providers as registry
 from ..router import router as core
@@ -138,21 +138,21 @@ def _retrieval_query(question: str, history: list[dict]) -> str:
     return question
 
 
-def ask(question: str, think_harder: bool = False, consent: bool = False, history: list[dict] | None = None,
+def ask(question: str, think_harder: bool = False, history: list[dict] | None = None,
         local_only: bool = False) -> Iterator[str]:
     """`local_only`: never the cloud tier (the MCP flow, where the client is the cloud model)."""
     from ..index.indexer import indexer
 
     indexer.interactive.set()
     try:
-        yield from _ask(question.strip(), think_harder, consent, history or [], local_only)
+        yield from _ask(question.strip(), think_harder, history or [], local_only)
     except (local.LocalError, cloud.CloudError) as e:
         yield _ev("error", message=str(e))
     finally:
         indexer.interactive.clear()
 
 
-def _ask(question: str, think: bool, consent: bool, history: list[dict], local_only: bool = False) -> Iterator[str]:
+def _ask(question: str, think: bool, history: list[dict], local_only: bool = False) -> Iterator[str]:
     t0 = time.perf_counter()
     mode = "local" if local_only else core.ai_mode()
     providers = core.provider_order("ask")
@@ -199,13 +199,14 @@ def _ask(question: str, think: bool, consent: bool, history: list[dict], local_o
             why = str(e)
         if why:
             tier, reason = "T2", f"the redaction gate blocked the request: {why}"
-        elif mode == "ask" and not consent:
-            yield _ev("sources", sources=[s.public() for s in sources], tier="T3", provider=providers[0], model=None,
-                      reason="", retrieval=info)
-            yield _ev("consent", payload=SYSTEM + "\n\n" + payload, provider=providers[0], redacted=len(red.mapping),
-                      entities=red.entities)
-            return
         else:
+            yield _ev("review", redacted=len(red.mapping))
+            try:
+                # PLAN4 7.7: the user sees this exact payload and sends it, or not.
+                payload = review.confirm(payload, red, "Ask", providers, SYSTEM)
+            except gate.Blocked as e:
+                tier, reason = "T2", str(e)
+        if tier == "T3":
             yield _ev("sources", sources=[s.public() for s in sources], tier="T3", provider=providers[0], model=None,
                       reason="", retrieval=info, redacted=len(red.mapping))
             errors = []

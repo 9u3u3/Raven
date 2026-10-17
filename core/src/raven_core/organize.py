@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from . import db
 from .fs import ops
-from .privacy import gate
+from .privacy import gate, review
 from .storage import protect
 
 GROUPS = {
@@ -248,11 +248,12 @@ def _model_plan(root: str, files: list[os.DirEntry], rows: dict[str, dict]) -> t
     if red is not None:
         try:
             sealed = gate.seal(payload, red)
+            sealed = review.confirm(sealed, red, "Organize plan", order, TREE_SYSTEM)  # PLAN4 7.7
         except gate.Blocked:
             sealed = None
         if sealed is not None:
             for prov in order:
-                lid = gate.ledger_write("organize", "T3", prov, TREE_SYSTEM + "\n\n" + payload, len(red.mapping))
+                lid = gate.ledger_write("organize", "T3", prov, TREE_SYSTEM + "\n\n" + sealed, len(red.mapping))
                 try:
                     data, _ = registry.chat(prov, TREE_SYSTEM, sealed, TREE_SCHEMA)
                     tier, planner = "T3", prov

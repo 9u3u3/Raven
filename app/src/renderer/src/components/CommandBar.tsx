@@ -129,7 +129,6 @@ function appCommands(): Cmd[] {
     { label: 'Summarize this folder, think harder', hint: 'cloud, redacted', run: () => void summarize(s.path, true) },
     { label: 'AI mode: Local only', run: () => void setAiMode('local') },
     { label: 'AI mode: Hybrid', run: () => void setAiMode('hybrid') },
-    { label: 'AI mode: Ask each time', run: () => void setAiMode('ask') },
     ...(s.privacy?.dev ? [{ label: 'Toggle latency overlay', hint: 'Ctrl+Shift+D', run: () => useApp.setState({ overlay: !s.overlay }) }] : []),
     { label: 'Theme: follow system', run: () => setPref('theme', 'system') },
     { label: 'Theme: light', run: () => setPref('theme', 'light') },

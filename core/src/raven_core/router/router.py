@@ -15,7 +15,7 @@ import time
 
 from .. import db
 from ..fs.kinds import kind_of
-from ..privacy import gate
+from ..privacy import gate, review
 from . import cloud, local
 from . import providers as registry
 
@@ -39,7 +39,9 @@ SUMMARY_SYSTEM = (
 
 
 def ai_mode() -> str:
-    return db.get_setting("ai_mode") or "hybrid"  # local | hybrid | ask
+    """local or hybrid. The old "ask" (Ask each time) is hybrid now: every cloud call waits for a review (PLAN4 7.7)."""
+    m = db.get_setting("ai_mode") or "hybrid"
+    return "hybrid" if m == "ask" else m
 
 
 def _human(n: int | None) -> str:
@@ -127,18 +129,18 @@ def _file_count(path: str) -> int:
     return db.conn().execute("SELECT COUNT(*) FROM files WHERE path LIKE ? ESCAPE '\\' AND is_dir=0", (like,)).fetchone()[0]
 
 
-def run(task: str, path: str, think_harder: bool = False, consent: bool = False) -> dict:
+def run(task: str, path: str, think_harder: bool = False) -> dict:
     """Run a task. While it runs, background indexing yields the GPU and the PII model."""
     from ..index.indexer import indexer
 
     indexer.interactive.set()
     try:
-        return _run(task, path, think_harder, consent)
+        return _run(task, path, think_harder)
     finally:
         indexer.interactive.clear()
 
 
-def _run(task: str, path: str, think_harder: bool = False, consent: bool = False) -> dict:
+def _run(task: str, path: str, think_harder: bool = False) -> dict:
     if task not in HEAVY_TASKS:
         raise ValueError(f"Unknown task {task}")
     from ..privacy import scope
@@ -172,11 +174,13 @@ def _run(task: str, path: str, think_harder: bool = False, consent: bool = False
             why = str(e)
         if why:
             tier, reason = "T2", f"the redaction gate blocked the request: {why}"
-        elif mode == "ask" and not consent:
-            # Ask each time: show the exact redacted payload before anything leaves.
-            return {"needs_consent": True, "payload": payload, "provider": providers[0], "redacted": len(red.mapping),
-                    "entities": red.entities, "layer2": red.layer2_state}
         else:
+            try:
+                # PLAN4 7.7: the user sees this exact payload and sends it, or not.
+                payload = review.confirm(payload, red, "Folder summary", providers, SUMMARY_SYSTEM)
+            except gate.Blocked as e:
+                tier, reason = "T2", str(e)
+        if tier == "T3":
             errors = []
             for prov in providers:
                 lid = gate.ledger_write(task, "T3", prov, payload, len(red.mapping))

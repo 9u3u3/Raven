@@ -48,6 +48,7 @@ import StatusLine from './components/StatusLine'
 import CommandBar from './components/CommandBar'
 import ConfirmDialog from './components/ConfirmDialog'
 import ConflictDialog from './components/ConflictDialog'
+import CloudReview from './components/CloudReview'
 import BatchRename from './components/BatchRename'
 import Unlock from './components/Unlock'
 import Boot from './components/Boot'
@@ -443,6 +444,7 @@ export default function App() {
       <StatusLine />
       <ConfirmDialog />
       <ConflictDialog />
+      <CloudReview />
       <FolderPickerHost />
       <BatchRename />
       <ConnectDialog />

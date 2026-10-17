@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import { ApiError, get, post, send, stream } from './lib/api'
 import { basename, dirname } from './lib/format'
-import type { AskSection, CompressJob, CompressSummary, Conflict, ConflictChoice, ConsentRequest, CopyJob, Entry, IndexProgress, Journal, Listing, Places, PrivacyStatus, RouterResult, SearchResponse } from './lib/types'
+import type { AskSection, CompressJob, CompressSummary, Conflict, ConflictChoice, CopyJob, Entry, IndexProgress, Journal, Listing, Places, PrivacyStatus, RouterResult, SearchResponse } from './lib/types'
 
 export type Font = 'inter' | 'commit' | 'geist' | 'jetbrains' | 'plex' | 'system'
 export const FONTS: [Font, string][] = [['inter', 'Inter'], ['commit', 'Commit Mono'], ['geist', 'Geist Mono'], ['jetbrains', 'JetBrains Mono'], ['plex', 'IBM Plex Mono'], ['system', 'System']]
@@ -110,9 +110,8 @@ export type Answer = {
   question: string
   path: string
   think: boolean
-  status: 'running' | 'consent' | 'done' | 'error'
+  status: 'running' | 'done' | 'error'
   result?: RouterResult
-  consent?: ConsentRequest
   error?: string
   started: number
 }
@@ -833,24 +832,23 @@ export async function refreshPrivacy(): Promise<void> {
   }
 }
 
-export async function setAiMode(mode: 'local' | 'hybrid' | 'ask'): Promise<void> {
+export async function setAiMode(mode: 'local' | 'hybrid'): Promise<void> {
   await post('/settings', { key: 'ai_mode', value: mode })
   await refreshPrivacy()
-  say(mode === 'local' ? 'Local only: nothing leaves this computer' : mode === 'hybrid' ? 'Hybrid: heavy tasks may use the cloud after redaction' : 'Ask each time: Raven shows each payload before it sends it')
+  say(mode === 'local' ? 'Local only: nothing leaves this computer' : 'Hybrid: heavy tasks may use the cloud. You review each payload before it goes')
 }
 
 /** Summarize a folder. Small folders run locally. Think harder may use the cloud (section 4.1). */
-export async function summarize(path: string, think = false, consent = false): Promise<void> {
+export async function summarize(path: string, think = false): Promise<void> {
   const question = `What is in ${basename(path)}?`
-  // A summary has its own tab. Think harder and consent stay in that tab.
+  // A summary has its own tab. Think harder stays in that tab. A cloud call waits in the review (CloudReview).
   if (!(st().screen === 'answer' && st().answer?.path === path)) newTab('answer')
   const tab = st().activeTab
   set({ cmdOpen: false, answer: { question, path, think, status: 'running', started: Date.now() } })
   try {
-    const r = await post<RouterResult | ConsentRequest>('/router/run', { task: 'folder_summary', path, think_harder: think, consent })
+    const r = await post<RouterResult>('/router/run', { task: 'folder_summary', path, think_harder: think })
     if (tabValue(tab, 'answer')?.path !== path) return
-    if ('needs_consent' in r) patchTab(tab, { answer: { question, path, think, status: 'consent', consent: r, started: Date.now() } })
-    else patchTab(tab, { answer: { question, path, think, status: 'done', result: r, started: Date.now() } })
+    patchTab(tab, { answer: { question, path, think, status: 'done', result: r, started: Date.now() } })
   } catch (e) {
     patchTab(tab, { answer: { question, path, think, status: 'error', error: (e as Error).message, started: Date.now() } })
   }
@@ -932,7 +930,7 @@ function findAsk(id: number): AskSection | undefined {
 }
 
 /** Ask a question about the files. `followUp` adds a section below the last one. */
-export async function ask(question: string, opts: { think?: boolean; consent?: boolean; followUp?: boolean; replace?: number } = {}): Promise<void> {
+export async function ask(question: string, opts: { think?: boolean; followUp?: boolean; replace?: number } = {}): Promise<void> {
   question = question.trim()
   if (!question) return
   // A new question is a new document in its own tab. Follow-ups and Think harder stay in the tab.
@@ -944,7 +942,7 @@ export async function ask(question: string, opts: { think?: boolean; consent?: b
   askAborts.set(tab, ac)
   const id = ++askSeq
   const prev = st().asks
-  // Think harder (or a consent answer) replaces its own section in place. A follow-up goes at the end.
+  // Think harder replaces its own section in place. A follow-up goes at the end.
   const at = opts.replace != null ? prev.findIndex((a) => a.id === opts.replace) : -1
   const before = at >= 0 ? prev.slice(0, at) : opts.followUp ? prev : []
   const history = before.filter((a) => a.status === 'done' && !a.notFound).slice(-2).map((a) => ({ q: a.question, a: a.text }))
@@ -953,14 +951,14 @@ export async function ask(question: string, opts: { think?: boolean; consent?: b
   try {
     await stream(
       '/ask',
-      { question, think_harder: !!opts.think, consent: !!opts.consent, history },
+      { question, think_harder: !!opts.think, history },
       (e) => {
         if (e.type === 'sources')
           patchAsk(id, { sources: e.sources, tier: e.tier, provider: e.provider, model: e.model, reason: e.reason, redacted: e.redacted, status: 'streaming' })
         else if (e.type === 'token') {
           const cur = findAsk(id)
           if (cur) patchAsk(id, { text: cur.text + e.t, firstMs: cur.firstMs ?? Date.now() - cur.started })
-        } else if (e.type === 'consent') patchAsk(id, { status: 'consent', consent: e })
+        } else if (e.type === 'review') patchAsk(id, { status: 'review', redacted: e.redacted })
         else if (e.type === 'done')
           patchAsk(id, {
             status: 'done',

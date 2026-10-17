@@ -28,6 +28,11 @@ async def _send_all(text: str) -> None:
         _clients.discard(ws)
 
 
+def clients() -> int:
+    """The number of open windows. The cloud review (privacy/review.py) needs one."""
+    return len(_clients)
+
+
 def publish(kind: str, **data: Any) -> None:
     """Send one event to every client. Safe from any thread."""
     if _loop is None or not _clients:

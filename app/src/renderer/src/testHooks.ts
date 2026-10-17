@@ -1,7 +1,7 @@
 // Test hooks for automation scripts (testdata/*.py) and screenshots (RAVEN_SHOT in the main process).
 // main.tsx installs them in a development build only (PLAN4 R1).
 import { showInSpace } from './screens/SpaceScreen'
-import { agentCommand, ask, navigate, setScreen, useApp, type Font } from './store'
+import { agentCommand, ask, navigate, setScreen, summarize, useApp, type Font } from './store'
 
 export function installTestHooks(): void {
   const w = window as unknown as Record<string, unknown>
@@ -11,7 +11,7 @@ export function installTestHooks(): void {
   w.__agent = agentCommand
   w.__nav = navigate
   // Screenshots: open a screen or a folder, set the font and the theme.
-  w.__ravenShot = ({ screen, path, font, theme, section }: { screen: string; path: string; font?: string; theme?: string; section?: string }) => {
+  w.__ravenShot = ({ screen, path, font, theme, section, summary }: { screen: string; path: string; font?: string; theme?: string; section?: string; summary?: string }) => {
     if (path) void navigate(path)
     if (screen === 'graph') {
       setScreen('organize')
@@ -27,6 +27,7 @@ export function installTestHooks(): void {
     }
     // A Settings section (RAVEN_SHOT_SECTION): scroll it to the top once the screen shows.
     // A second try: a section that loads its data first (MCP clients) is not there yet at 3 s.
+    if (summary) setTimeout(() => void summarize(summary, true), 1500)
     if (section) for (const ms of [3000, 5500]) setTimeout(() => document.getElementById(`set-${section}`)?.scrollIntoView({ block: 'start' }), ms)
   }
 }

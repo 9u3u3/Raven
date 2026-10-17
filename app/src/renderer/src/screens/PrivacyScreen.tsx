@@ -11,17 +11,16 @@ import { Ghost, Seg, Switch, stagger, useCountUp } from '../components/ui'
 
 const MODES: { id: AiMode; label: string; line: string }[] = [
   { id: 'local', label: 'Local only', line: 'Nothing leaves this computer.' },
-  { id: 'hybrid', label: 'Hybrid', line: 'Only redacted text leaves, for hard tasks.' },
-  { id: 'ask', label: 'Ask each time', line: 'You see and approve every send.' }
+  { id: 'hybrid', label: 'Hybrid', line: 'Only redacted text leaves, for hard tasks, after you review it.' }
 ]
 const EXCLUDED = ['.ssh', '.gnupg', '.password-store', '.mozilla', '.thunderbird', 'node_modules', '.git', '.venv', '.cache', '.config']
 
 const NOISE = '█▓▒░<>/#*%'
 
-/** Three modes as three cells. The chosen cell has an accent edge and says what leaves the computer. */
+/** Two modes as two cells. The chosen cell has an accent edge and says what leaves the computer. */
 function ModePicker({ mode }: { mode: AiMode }) {
   return (
-    <div className="grid grid-cols-3 border border-line">
+    <div className="grid grid-cols-2 border border-line">
       {MODES.map((m, k) => {
         const on = mode === m.id
         return (
