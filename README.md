@@ -80,7 +80,7 @@ See [Run it (development)](#run-it-development) for the optional tools and the t
   (Whisper). One review, one undo. A watch rule can name new files.
 - Graph: files as dots and links as lines, as in Obsidian: Markdown links and wikilinks, imports, mentions of a
   file name, similar meaning and the same content. Shift-drag selects files and moves them into a folder.
-  The file map by meaning is the second layout. The Inspector shows the links of one file.
+  The file map by meaning is the second layout. The Inspector shows the links of one file..
 
 **Privacy**
 - AI modes: Local only, Hybrid, Ask each time. Offline, the mode line says `LOCAL ONLY (offline)`.
