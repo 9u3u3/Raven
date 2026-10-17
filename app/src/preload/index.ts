@@ -19,6 +19,12 @@ const api = {
   /** Start `ollama serve` (setup screen). True when Ollama answers within 15 s. */
   startOllama: (): Promise<boolean> => ipcRenderer.invoke('raven:start-ollama'),
   printPdf: (html: string, out: string): Promise<string | null> => ipcRenderer.invoke('raven:print-pdf', html, out),
+  /** Open a Raven page (releases, issues) in the browser. Other URLs are refused. */
+  openUrl: (url: string): Promise<string | null> => ipcRenderer.invoke('raven:open-url', url),
+  /** Start with the computer: read it, or set it with `on`. */
+  loginItem: (on?: boolean): Promise<{ supported: boolean; on: boolean }> => ipcRenderer.invoke('raven:login-item', on),
+  /** Delete the index, the models, the keys and the settings, then start Raven again. Null when it works. */
+  deleteAllData: (): Promise<string | null> => ipcRenderer.invoke('raven:delete-all-data'),
   platform: process.platform
 }
 

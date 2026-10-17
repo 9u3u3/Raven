@@ -1,14 +1,14 @@
-import { Cloud, Cpu, FolderSearch, Folder, HelpCircle, KeyRound, Keyboard, Lock, Palette, Plug, ShieldAlert, type LucideIcon } from 'lucide-react'
+import { Cloud, Cpu, Database, Download, FolderSearch, Folder, HelpCircle, KeyRound, Lock, Palette, Plug, SlidersHorizontal, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { get, post } from '../lib/api'
 import { size, tildify } from '../lib/format'
-import { FONTS, POLICY_NAMES, loadPolicies, refreshPrivacy, say, setPref, setPrivate, togglePolicy, useApp, type Font } from '../store'
+import { FONTS, POLICY_NAMES, loadPolicies, refreshPrivacy, say, setAiMode, setPref, setPrivate, togglePolicy, useApp, type Font } from '../store'
+import { PRIVACY_TEXT } from '../lib/privacyText'
 import AiProviders from '../components/AiProviders'
 import PrivacyWords from '../components/PrivacyWords'
 import FeaturePicker, { DeviceLine, useFeatures } from '../components/FeaturePicker'
 import OllamaSetup from '../components/OllamaSetup'
 import { Chip, Ghost, PageHeader, Seg, Switch, Track, stagger } from '../components/ui'
-import { Settings as SettingsIcon } from 'lucide-react'
 import { pickFolder } from '../components/FolderPicker'
 
 // One long page with section headings, not tabs (section 12.4).
@@ -85,20 +85,80 @@ function PrivateFolders() {
   )
 }
 
-type Update = { enabled: boolean; current: string; latest?: string; url?: string; newer?: boolean; error?: string }
+type Update = { enabled: boolean; current: string; latest?: string; url?: string; newer?: boolean; error?: string; notes?: string }
 
-/** Opt-in update check: one request a day to the release feed, never with file data. */
-function UpdateRow({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+/** A small part of a section, with its own heading. */
+function Sub({ title, text, children }: { title: string; text?: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-7">
+      <div className="label mb-1">{title}</div>
+      {text && <p className="mb-3 max-w-[640px] text-[12.5px] text-muted">{text}</p>}
+      {children}
+    </div>
+  )
+}
+
+/** The notes of one version, from CHANGELOG.md or a release: headings and list lines, as plain text. */
+function Notes({ text }: { text: string }) {
+  return (
+    <div className="selectable max-w-[720px] text-[12.5px] leading-relaxed">
+      {text.split('\n').map((ln, k) => {
+        if (ln.startsWith('## ')) return <div key={k} className="mt-3 font-medium">{ln.slice(3)}</div>
+        if (ln.startsWith('### ')) return <div key={k} className="label mt-2">{ln.slice(4)}</div>
+        if (ln.startsWith('- ')) return <div key={k} className="pl-4 -indent-3 text-muted">· {ln.slice(2)}</div>
+        if (ln.startsWith('  ')) return <div key={k} className="pl-4 text-muted">{ln.trim()}</div>
+        return ln.trim() && !ln.startsWith('# ') ? <p key={k} className="mt-1 text-muted">{ln}</p> : null
+      })}
+    </div>
+  )
+}
+
+/** Updates (PLAN4 section 6 item 8): the version, the opt-in check (one request a day, no file data) and the notes. */
+function UpdatesSection({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   const [u, setU] = useState<Update | null>(null)
+  const [about, setAbout] = useState<{ version: string; dev: boolean; changelog: string } | null>(null)
+  const [all, setAll] = useState(false)
+  useEffect(() => void get<typeof about>('/about').then(setAbout).catch(() => {}), [])
   useEffect(() => {
     if (on) void get<Update>('/update').then(setU).catch(() => setU(null))
     else setU(null)
   }, [on])
-  const note = !u?.enabled ? undefined : u.error ? u.error : u.newer ? `Raven ${u.latest} is out: ${u.url}` : `Raven ${u.current} is the latest.`
+  const note = !u?.enabled ? 'Off: Raven sends no request.' : u.error ? u.error : u.newer ? `Raven ${u.latest} is out.` : `Raven ${u.current} is the latest.`
+  // The notes of this version: the changelog from its "## <version>" heading to the next one.
+  const log = about?.changelog ?? ''
+  const start = log.indexOf('\n## ')
+  const next = start < 0 ? -1 : log.indexOf('\n## ', start + 4)
+  const mine = start < 0 ? '' : log.slice(start + 1, next < 0 ? undefined : next)
   return (
-    <Row label="Check for updates" text={note}>
-      <Switch on={on} label="Check for updates" onChange={onChange} />
-    </Row>
+    <Section id="updates" i={8} title="Updates">
+      <Row label="Version" text={about?.dev ? 'Development build' : 'Release build'}>
+        <span className="mono">{about?.version ?? ''}</span>
+      </Row>
+      <Row label="Check for updates" text={note}>
+        <Switch on={on} label="Check for updates" onChange={onChange} />
+      </Row>
+      {u?.newer && u.url && (
+        <div className="mt-3 flex items-center gap-4">
+          <button className="btn-primary" onClick={() => void window.raven?.openUrl(u.url!).then((e) => e && say(e, 'error'))}>
+            Get Raven {u.latest}
+          </button>
+        </div>
+      )}
+      {u?.newer && u.notes && (
+        <div className="mt-4">
+          <div className="label mb-1">What is new in {u.latest}</div>
+          <Notes text={u.notes} />
+        </div>
+      )}
+      {mine && (
+        <div className="mt-5">
+          <Notes text={all ? log.slice(start + 1) : mine} />
+          <Ghost tone="plain" onClick={() => setAll((v) => !v)}>
+            {all ? 'Show this version only' : 'Show all versions'}
+          </Ghost>
+        </div>
+      )}
+    </Section>
   )
 }
 
@@ -146,7 +206,7 @@ const KEYS: [string, string][] = [
 ]
 
 /** Encrypted index (secure.py): SQLCipher with a passphrase. The sidecar restarts to swap the files. */
-function EncryptionSection() {
+function EncryptionBlock() {
   const [st, setSt] = useState<{ enabled: boolean; keyring: boolean; remembered: boolean } | null>(null)
   const [pw, setPw] = useState('')
   const [pw2, setPw2] = useState('')
@@ -197,7 +257,7 @@ function EncryptionSection() {
     }
   }
   return (
-    <Section id="security" title="Encrypted index" i={5}>
+    <Sub title="Encrypted index" text="The index holds the text of your indexed files. Encryption keeps it unreadable without the passphrase.">
       <div className="mb-3 flex max-w-[520px] flex-col gap-2">
         <input type="password" value={pw} placeholder={st.enabled ? 'Passphrase, to turn encryption off' : 'New passphrase (8 characters or more)'} onChange={(e) => setPw(e.target.value)} className="field" />
         {!st.enabled && <input type="password" value={pw2} placeholder="The same passphrase again" onChange={(e) => setPw2(e.target.value)} className="field" />}
@@ -220,7 +280,7 @@ function EncryptionSection() {
           Encrypt the index
         </button>
       )}
-    </Section>
+    </Sub>
   )
 }
 
@@ -271,11 +331,38 @@ function FeaturesSection() {
 type Notice = { name: string; version?: string; license: string; source?: string; notice?: string }
 type About = { version: string; dev: boolean; notices: { models: Notice[]; programs: Notice[]; python: Notice[]; node: Notice[] } }
 
+const ISSUES = 'https://github.com/9u3u3/Raven/issues/new'
+
+/** A new GitHub issue with the version and a short form. The diagnostics stay out unless the user pastes them. */
+function issueUrl(version: string): string {
+  const body = `Raven ${version} on ${window.raven?.platform ?? 'unknown'}\n\nWhat happened:\n\nWhat you expected:\n\nSteps:\n1.\n\nDiagnostics (Settings, Help, Copy diagnostics), if you want to add them:\n`
+  return `${ISSUES}?title=${encodeURIComponent('Problem: ')}&body=${encodeURIComponent(body)}`
+}
+
+/** What Raven sends, where and when (lib/privacyText.ts, the same text as docs/PRIVACY.md). */
+export function PrivacySent() {
+  return (
+    <div className="mt-3 grid max-w-[760px] gap-4 md:grid-cols-2">
+      {PRIVACY_TEXT.map((g) => (
+        <div key={g.title}>
+          <div className="label mb-1">{g.title}</div>
+          {g.lines.map((l) => (
+            <p key={l} className="mb-1 text-[12.5px] leading-snug text-muted">
+              {l}
+            </p>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** Help (PLAN4 B5, B6): the version, "Copy diagnostics", the log folder and the third-party notices. */
 function HelpSection() {
   const [about, setAbout] = useState<About | null>(null)
   const [logDir, setLogDir] = useState('')
   const [open, setOpen] = useState(false)
+  const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
   useEffect(() => void get<About>('/about').then(setAbout).catch(() => {}), [])
   const copy = async (): Promise<void> => {
@@ -315,9 +402,12 @@ function HelpSection() {
       </div>
     )
   return (
-    <Section id="help" title="Help" i={10}>
-      <Row label="Version" text={about?.dev ? 'Development build' : 'Release build'}>
-        <span className="mono">{about?.version ?? ''}</span>
+    <Section id="help" title="Help" i={9}>
+      <Row label="Guide" text="Press ? anywhere for the guide, the tour and a short help page for the screen you are on.">
+        <kbd className="kbd">?</kbd>
+      </Row>
+      <Row label="Report a problem" text="Opens a new issue on GitHub in the browser. Copy the diagnostics first and paste them in, if you want to.">
+        <Ghost onClick={() => void window.raven?.openUrl(issueUrl(about?.version ?? '')).then((e) => e && say(e, 'error'))}>Report a problem</Ghost>
       </Row>
       <Row label="Diagnostics" text="A text report for a bug report: the version, the device, the settings without keys, and the last log lines. It holds no file content.">
         <Ghost disabled={busy} onClick={() => void copy()}>
@@ -342,18 +432,24 @@ function HelpSection() {
           {group('JavaScript libraries (the window)', about.notices.node)}
         </div>
       )}
+      <Row label="What Raven sends" text="What leaves this computer, where it goes, and when.">
+        <Ghost tone="plain" onClick={() => setSent((v) => !v)}>
+          {sent ? 'Hide' : 'Show'}
+        </Ghost>
+      </Row>
+      {sent && <PrivacySent />}
     </Section>
   )
 }
 
-function PerformanceSection() {
+function PerformanceBlock() {
   const [st, setSt] = useState<{ mode: string; chunks: number; copies: number; active: boolean; threshold: number } | null>(null)
   const load = (): void => void get<typeof st>('/search/vectors').then(setSt).catch(() => {})
   useEffect(load, [])
   if (!st) return null
   const set = (v: string): void => void post('/settings', { key: 'binary_vectors', value: v }).then(() => setTimeout(load, 1500))
   return (
-    <Section id="performance" title="Performance" i={7}>
+    <Sub title="Binary vectors" text="A smaller copy of each vector makes search by meaning faster on a large index.">
       <div className="mb-3">
         <Seg
           options={[['auto', `Automatic (from ${st.threshold.toLocaleString()} chunks)`], ['on', 'On'], ['off', 'Off']]}
@@ -364,7 +460,7 @@ function PerformanceSection() {
       <div className="mono text-[11px] text-muted">
         {st.chunks.toLocaleString()} chunks · {st.copies.toLocaleString()} binary copies · {st.active ? 'binary search on' : 'exact search'}
       </div>
-    </Section>
+    </Sub>
   )
 }
 
@@ -440,7 +536,7 @@ function McpSection() {
     })
   }
   return (
-    <Section id="mcp" title="MCP clients" i={4}>
+    <Section id="integrations" title="Integrations" i={6} text="MCP clients on this computer can search and read your indexed files through Raven, with redaction. They cannot change files.">
       <div className="mb-4 flex items-center gap-3">
         <Switch on={cfg.enabled} label="Let MCP clients use Raven" onChange={(v) => void post('/settings', { key: 'mcp_enabled', value: v }).then(load)} />
         <span className="font-medium">Let MCP clients use Raven</span>
@@ -476,6 +572,93 @@ function McpSection() {
   )
 }
 
+type DataInfo = { dir: string; models_dir: string; models_inside: boolean; total: number; parts: { id: string; label: string; bytes: number }[] }
+
+/** Data (PLAN4 section 6 item 7): the data folder, its parts, the index size, the settings export, and "Delete
+ * all Raven data". The main process does the delete, because the sidecar cannot delete its own open files. */
+function DataSection() {
+  const [d, setD] = useState<DataInfo | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => void get<DataInfo>('/data').then(setD).catch(() => {}), [])
+  const exportSettings = async (): Promise<void> => {
+    const out = await get<unknown>('/data/export')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }))
+    a.download = 'raven-settings.json'
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+  }
+  const deleteAll = (): void =>
+    useApp.setState({
+      confirm: {
+        title: 'Delete all Raven data',
+        body:
+          'Raven deletes its index, its models, the Ollama that it installed, the keys in the keyring, the settings and the logs. Then it starts again as new. ' +
+          'Your files stay, and the Trash stays. Models in a system Ollama stay: remove them with "ollama rm". You cannot undo this.',
+        action: 'Delete all',
+        danger: true,
+        run: () => {
+          setBusy(true)
+          void window.raven?.deleteAllData().then((err) => {
+            setBusy(false)
+            if (err) say(err, 'error')
+          })
+        }
+      }
+    })
+  return (
+    <Section id="data" i={7} title="Data" text="Raven keeps its index, models and settings in one folder. Your files stay where they are.">
+      {d && (
+        <>
+          <Row label="Data folder" text={d.models_inside ? undefined : `Models: ${d.models_dir}`}>
+            <span className="flex items-center gap-4">
+              <span className="mono max-w-[360px] truncate text-[12px]" title={d.dir}>
+                {d.dir}
+              </span>
+              <Ghost tone="plain" onClick={() => void window.raven?.openPath(d.dir).then((e) => e && say(e, 'error'))}>
+                Open
+              </Ghost>
+            </span>
+          </Row>
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
+            <Chip>{size(d.total) || '0 B'} in all</Chip>
+            {d.parts
+              .filter((p) => p.bytes > 0)
+              .map((p) => (
+                <span key={p.id} className="text-[12.5px] text-muted">
+                  {p.label} <span className="mono text-text">{size(p.bytes)}</span>
+                </span>
+              ))}
+          </div>
+        </>
+      )}
+      <IndexFile />
+      <div className="mt-5">
+        <Row label="Export the settings" text="A JSON file with your settings and the provider order. It holds no keys.">
+          <Ghost onClick={() => void exportSettings().catch((e) => say((e as Error).message, 'error'))}>Export</Ghost>
+        </Row>
+        <Row label="Delete all Raven data" text="The index, the models, the keys, the settings and the logs. Your files and the Trash stay.">
+          <Ghost tone="danger" disabled={busy || !window.raven} onClick={deleteAll}>
+            {busy ? 'Deleting…' : 'Delete all'}
+          </Ghost>
+        </Row>
+      </div>
+    </Section>
+  )
+}
+
+/** Start with the computer (Settings, General). Only a packaged app can do it; on Linux, only the AppImage. */
+function StartRow() {
+  const [st, setSt] = useState<{ supported: boolean; on: boolean } | null>(null)
+  useEffect(() => void window.raven?.loginItem().then(setSt), [])
+  if (!st) return null
+  return (
+    <Row label="Start with the computer" text={st.supported ? 'Raven opens minimized when you log in, and keeps the index up to date.' : 'Only the installed app can start with the computer.'}>
+      <Switch on={st.on} label="Start with the computer" onChange={(v) => void window.raven?.loginItem(v).then(setSt)} />
+    </Row>
+  )
+}
+
 export default function SettingsScreen() {
   const index = useApp((s) => s.index)
   const home = useApp((s) => s.places?.home ?? '')
@@ -492,6 +675,7 @@ export default function SettingsScreen() {
     get<Record<string, unknown>>('/settings').then(setSettings)
   useEffect(() => {
     void reload()
+    void refreshPrivacy() // the AI mode
   }, [])
 
   const setRoots = async (next: string[]): Promise<void> => {
@@ -513,23 +697,22 @@ export default function SettingsScreen() {
     setSettings((s) => ({ ...s, [key]: key.endsWith('_api_key') ? `…${String(value).slice(-4)}` : value }))
   }
 
+  // The order of PLAN4 section 6.
   const NAV: [string, string, LucideIcon][] = [
-    ['folders', 'Indexed folders', FolderSearch],
+    ['general', 'General', FolderSearch],
     ['appearance', 'Appearance', Palette],
     ['features', 'Features and models', Cpu],
     ['cloud', 'AI providers', Cloud],
-    ['words', 'Words to hide', KeyRound],
-    ['mcp', 'MCP clients', Plug],
-    ['security', 'Encryption', Lock],
-    ['performance', 'Performance', Cpu],
-    ['power', 'Power user', ShieldAlert],
-    ['private', 'Private folders', Lock],
-    ['rules', 'Folder rules', ShieldAlert],
-    ['shortcuts', 'Shortcuts', Keyboard],
-    ['help', 'Help', HelpCircle]
+    ['privacy', 'Privacy', Lock],
+    ['integrations', 'Integrations', Plug],
+    ['data', 'Data', Database],
+    ['updates', 'Updates', Download],
+    ['help', 'Help', HelpCircle],
+    ['advanced', 'Advanced', SlidersHorizontal]
   ]
+  const aiMode = useApp((s) => s.privacy?.ai_mode ?? 'hybrid')
   const scroller = useRef<HTMLDivElement>(null)
-  const [here, setHere] = useState('folders')
+  const [here, setHere] = useState('general')
   const [keyFilter, setKeyFilter] = useState('')
   const onScroll = (): void => {
     const box = scroller.current
@@ -561,7 +744,9 @@ export default function SettingsScreen() {
 
         <div className="min-w-0 flex-1">
 
-          <Section id="folders" i={1} title="Indexed folders">
+          <Section id="general" i={1} title="General">
+            <StartRow />
+            <div className="label mb-2 mt-6">Indexed folders</div>
             {roots.length === 0 && <p className="mb-3 text-muted">No folders are indexed yet. Add one to start.</p>}
             <div className="mb-5">
               {roots.map((r, k) => (
@@ -603,7 +788,6 @@ export default function SettingsScreen() {
                 <Track pct={used * 100} color="var(--accent)" />
               </div>
             )}
-            <IndexFile />
           </Section>
 
           <Section id="appearance" i={2} title="Appearance">
@@ -659,25 +843,49 @@ export default function SettingsScreen() {
             id="cloud"
             i={4}
             title="AI providers"
-            text="Heavy tasks and Think harder can use a cloud model, after redaction. Raven tries the providers in this order and uses the first one that works."
+            text="Heavy tasks and Think harder can use a cloud model, after redaction and your review. Raven tries the providers in this order and uses the first one that works."
           >
-            <AiProviders />
+            <Row label="AI mode" text={aiMode === 'local' ? 'Local only: nothing leaves this computer.' : 'Hybrid: only redacted text leaves, for hard tasks, after you review it.'}>
+              <Seg
+                options={[
+                  ['local', 'Local only'],
+                  ['hybrid', 'Hybrid']
+                ]}
+                value={aiMode === 'local' ? 'local' : 'hybrid'}
+                onChange={(v) => void setAiMode(v)}
+              />
+            </Row>
+            <div className="mt-5">
+              <AiProviders />
+            </div>
           </Section>
 
-          <Section
-            id="words"
-            i={4}
-            title="Words to always hide"
-            text="Family names, a company, a client, a project code. Raven hides these words in every cloud request, in text and in file names. Case does not count."
-          >
-            <PrivacyWords />
+          <Section id="privacy" i={5} title="Privacy" text="What Raven hides before a cloud request, and what no AI reads at all. The Privacy screen shows the ledger of what went.">
+            <Sub
+              title="Words to always hide"
+              text="Family names, a company, a client, a project code. Raven hides these words in every cloud request, in text and in file names. Case does not count."
+            >
+              <PrivacyWords />
+            </Sub>
+            <Sub
+              title="Private folders"
+              text="No AI and no model reads a private folder, local or cloud. Raven does not index it, search its content, summarize it, organize it, name its files or learn from it. Photos, videos and audio never go to a cloud AI, in any folder."
+            >
+              <PrivateFolders />
+            </Sub>
+            <EncryptionBlock />
+            <Sub title="What Raven sends">
+              <PrivacySent />
+            </Sub>
           </Section>
 
           <McpSection />
-          <EncryptionSection />
-          <PerformanceSection />
+          <DataSection />
+          <UpdatesSection on={!!settings.update_check} onChange={(v) => void setSetting('update_check', v)} />
+          <HelpSection />
 
-          <Section id="power" i={7} title="Power user">
+          <Section id="advanced" i={10} title="Advanced">
+            <Sub title="Power user">
             <Row label="Power user mode">
               <Switch
                 on={!!settings.power_user}
@@ -710,23 +918,12 @@ export default function SettingsScreen() {
             >
               <Switch on={!!settings.index_code} label="Read code projects" onChange={(v) => void setSetting('index_code', v)} />
             </Row>
-            <UpdateRow on={!!settings.update_check} onChange={(v) => void setSetting('update_check', v)} />
-          </Section>
-
-          <Section
-            id="private"
-            i={8}
-            title="Private folders"
-            text="No AI and no model reads a private folder, local or cloud. Raven does not index it, search its content, summarize it, organize it, name its files or learn from it. Photos, videos and audio never go to a cloud AI, in any folder."
-          >
-            <PrivateFolders />
-          </Section>
-
-          <Section id="rules" i={8} title="Folder rules">
-            <FolderRules />
-          </Section>
-
-          <Section id="shortcuts" i={9} title="Shortcuts">
+            </Sub>
+            <Sub title="Folder rules">
+              <FolderRules />
+            </Sub>
+            <PerformanceBlock />
+            <Sub title="Shortcuts">
             <div className="relative mb-3 max-w-[360px]">
               <KeyRound size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
               <input value={keyFilter} onChange={(e) => setKeyFilter(e.target.value)} placeholder="Find a shortcut" className="field w-full !pl-9" spellCheck={false} />
@@ -742,9 +939,8 @@ export default function SettingsScreen() {
               ))}
               {!keys.length && <span className="col-span-2 text-muted">No shortcut matches “{keyFilter}”.</span>}
             </div>
+            </Sub>
           </Section>
-
-          <HelpSection />
         </div>
       </div>
     </div>

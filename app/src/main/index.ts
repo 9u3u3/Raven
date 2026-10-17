@@ -163,6 +163,7 @@ async function startSidecar(): Promise<void> {
   const child = sidecar
   if (await waitHealth(180000, child)) {
     setState('ok')
+    console.log(`[raven] sidecar ready on port ${cfg.port}`)
     // A sidecar that runs well for a minute starts the restart count again.
     setTimeout(() => {
       if (sidecar === child) restarts = 0
@@ -232,7 +233,8 @@ function stopOllama(): void {
   const child = ollama
   if (!child?.pid) return
   try {
-    if (process.platform === 'win32') child.kill()
+    // Windows has no process groups: taskkill /T also stops the model runners that `ollama serve` started.
+    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
     else process.kill(-child.pid, 'SIGTERM')
   } catch {
     /* already gone */
@@ -326,7 +328,12 @@ function createWindow(): void {
     }
   })
   // A screenshot run (RAVEN_SHOT) keeps the window hidden: it paints anyway, and nothing pops up.
-  win.on('ready-to-show', () => !SHOT && win?.show())
+  // A start with the computer (--hidden, Settings, General) opens the window minimized.
+  win.on('ready-to-show', () => {
+    if (SHOT) return
+    if (process.argv.includes('--hidden')) win?.minimize()
+    else win?.show()
+  })
   // No app menu: its default accelerators (Ctrl+R, Ctrl+W) clash with the Raven keyboard map.
   // F12 opens the developer tools in a development build.
   win.webContents.on('before-input-event', (_e, input) => {
@@ -382,7 +389,95 @@ function terminalCommand(dir: string): [string, string[]] | null {
   return null
 }
 
+// Links that the window can open in the browser: the Raven repo pages (releases, issues, notes) only.
+const OPEN_URLS = ['https://github.com/9u3u3/']
+
+/** Start with the computer (Settings, General). Windows and macOS: the login item. Linux: an autostart file. */
+function autostartFile(): string {
+  return join(process.env.XDG_CONFIG_HOME || join(app.getPath('home'), '.config'), 'autostart', 'raven.desktop')
+}
+
+function loginItem(): { supported: boolean; on: boolean } {
+  if (!app.isPackaged) return { supported: false, on: false }
+  if (process.platform === 'linux') {
+    // Only the AppImage has a fixed path to start. APPIMAGE is its path, set by the AppImage runtime.
+    if (!process.env.APPIMAGE) return { supported: false, on: false }
+    return { supported: true, on: existsSync(autostartFile()) }
+  }
+  return { supported: true, on: app.getLoginItemSettings().openAtLogin }
+}
+
+function setLoginItem(on: boolean): void {
+  if (process.platform === 'linux') {
+    const f = autostartFile()
+    if (!on) return rmSync(f, { force: true })
+    mkdirSync(dirname(f), { recursive: true })
+    const exec = `"${process.env.APPIMAGE}" --hidden`
+    writeFileSync(f, `[Desktop Entry]\nType=Application\nName=Raven\nExec=${exec}\nX-GNOME-Autostart-enabled=true\n`)
+    return
+  }
+  app.setLoginItemSettings({ openAtLogin: on, args: ['--hidden'] })
+}
+
+/** Delete all Raven data (Settings, Data). The sidecar deletes the keys and stops the indexer. This process then
+ * stops the sidecar and Ollama, deletes the data folder without the Trash, clears the window storage, and starts
+ * Raven again with nothing. */
+async function deleteAllData(): Promise<string | null> {
+  const r = await fetch(`http://127.0.0.1:${cfg.port}/data/delete-all`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: 'DELETE' })
+  })
+  if (!r.ok) return `The sidecar refused: ${await r.text()}`
+  const plan = (await r.json()) as { dir: string; paths: string[] }
+  const dir = resolve(plan.dir)
+  // Guards: the folder must be Raven's (it has the sidecar lock), and never the home folder or a drive root.
+  if (!existsSync(join(dir, 'sidecar.lock')) || dir === resolve(app.getPath('home')) || dirname(dir) === dir) return `Refused to delete ${dir}`
+  quitting = true
+  const child = sidecar
+  child?.kill()
+  stopOllama()
+  for (let i = 0; i < 50 && child && child.exitCode === null && child.signalCode === null; i++) await new Promise((res) => setTimeout(res, 100))
+  const failed: string[] = []
+  for (const p of plan.paths) {
+    if (resolve(dirname(p)) !== dir) continue
+    // Windows frees a file a short time after its process ends: try again a few times.
+    for (let i = 0; i < 10; i++) {
+      try {
+        rmSync(p, { recursive: true, force: true })
+        break
+      } catch {
+        if (i === 9) failed.push(p)
+        await new Promise((res) => setTimeout(res, 300))
+      }
+    }
+  }
+  await session.defaultSession.clearStorageData()
+  console.log(`[raven] deleted all data in ${dir}${failed.length ? `, could not delete ${failed.length} items` : ''}`)
+  app.relaunch()
+  app.exit(0)
+  return null
+}
+
 function registerIpc(): void {
+  ipcMain.handle('raven:open-url', (e, url: string) => {
+    if (!fromApp(e) || typeof url !== 'string' || !OPEN_URLS.some((u) => url.startsWith(u))) return 'Refused'
+    void shell.openExternal(url)
+    return null
+  })
+  ipcMain.handle('raven:login-item', (e, on?: boolean) => {
+    if (!fromApp(e)) return { supported: false, on: false }
+    if (typeof on === 'boolean' && loginItem().supported) setLoginItem(on)
+    return loginItem()
+  })
+  ipcMain.handle('raven:delete-all-data', async (e) => {
+    if (!fromApp(e)) return 'Refused'
+    try {
+      return await deleteAllData()
+    } catch (err) {
+      return String(err)
+    }
+  })
   ipcMain.handle('raven:config', (e) => (fromApp(e) ? { ...cfg } : null))
   ipcMain.handle('raven:open-path', async (e, p: string) => {
     if (!fromApp(e) || typeof p !== 'string') return 'Refused'

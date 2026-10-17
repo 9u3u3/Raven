@@ -409,7 +409,42 @@ async def diagnostics():
 def about():
     from . import notices
 
-    return {"version": VERSION, "dev": config.DEV, "notices": notices.load()}
+    return {"version": VERSION, "dev": config.DEV, "notices": notices.load(), "changelog": notices.changelog()}
+
+
+# ---------------------------------------------------------------- Settings, Data (PLAN4 section 6 item 7)
+
+
+@app.get("/data")
+async def data_info():
+    from . import data
+
+    return await run_in_threadpool(data.info)
+
+
+@app.get("/data/export")
+def data_export():
+    from . import data
+
+    return data.export_settings()
+
+
+class DeleteAllBody(BaseModel):
+    confirm: str
+
+
+@app.post("/data/delete-all")
+def data_delete_all(b: DeleteAllBody):
+    """Step 1 of "Delete all Raven data": stop the indexer and delete the keys from the keyring. The main
+    process then stops this sidecar and deletes the paths in the answer."""
+    from . import data
+
+    if b.confirm != "DELETE":
+        raise HTTPException(400, 'Send confirm: "DELETE"')
+    indexer.shutdown()
+    gone = data.forget_secrets()
+    log.warning("delete all data: the keys are gone (%d), the main process deletes the folder next", len(gone))
+    return {**data.delete_plan(), "keys": gone}
 
 
 # ---------------------------------------------------------------- encrypted index (secure.py)

@@ -88,3 +88,16 @@ def test_the_notices_list_the_models_and_libraries():
     assert "Gemma Terms of Use" in gemma["notice"]
     assert any(p["name"].lower() == "fastapi" for p in n["python"])
     assert any(p["name"] == "react" for p in n["node"])
+
+
+def test_one_version_in_all_places():
+    """config.py, pyproject.toml, package.json and the changelog name the same version (CHANGELOG.md)."""
+    import json
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    py = re.search(r'^version = "([^"]+)"', (root / "core/pyproject.toml").read_text(encoding="utf-8"), re.M).group(1)
+    js = json.loads((root / "app/package.json").read_text(encoding="utf-8"))["version"]
+    assert config.VERSION == py == js
+    assert f"## {config.VERSION}" in notices.changelog()

@@ -43,7 +43,9 @@ def check(force: bool = False) -> dict:
         else:
             r.raise_for_status()
             d = r.json()
-            out.update(latest=d.get("tag_name", ""), url=d.get("html_url", ""))
+            # The release notes, for Settings, Updates. A long body is cut, the link has the rest.
+            out.update(latest=d.get("tag_name", ""), url=d.get("html_url", ""), notes=(d.get("body") or "")[:4000],
+                       published=d.get("published_at", ""))
     except Exception as e:  # noqa: BLE001  (offline or a bad feed: say so, try again tomorrow)
         out["error"] = f"The update check failed: {type(e).__name__}"
     db.set_setting("update_last", out)

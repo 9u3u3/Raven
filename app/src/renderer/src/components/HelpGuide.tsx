@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
-import { setScreen, useApp } from '../store'
+import { setScreen, useApp, type Screen } from '../store'
 import { stagger } from './ui'
 
 // The "?" guide: a floating button, a visual guide to what Raven does, and a spotlight tour of the real screen.
@@ -267,6 +267,68 @@ function Tour({ onClose }: { onClose: () => void }) {
   )
 }
 
+// A short help page for each screen (PLAN4 section 8): the guide opens with the page of the screen you are on.
+const SCREEN_HELP: Record<Screen, { title: string; lines: string[] }> = {
+  files: {
+    title: 'Files',
+    lines: [
+      'Browse your folders as in any file manager. Double-click opens, Space opens the inspector.',
+      'Every change (move, rename, trash) goes in the journal. Ctrl+Z undoes the last one.',
+      'Right-click a folder for its rules, for example "Private: no AI".'
+    ]
+  },
+  space: {
+    title: 'Space',
+    lines: [
+      'What uses your disk, folder by folder. Click a block to go into it.',
+      'Reclaim lists what you can remove or shrink: duplicates, caches, old downloads. You see each change before it runs, and you can undo it.'
+    ]
+  },
+  organize: {
+    title: 'Organize',
+    lines: ['Pick a folder. Raven proposes new folders and names for its files.', 'Nothing moves until you approve the plan. One undo puts all the files back.']
+  },
+  privacy: {
+    title: 'Privacy',
+    lines: [
+      'The AI mode: Local only sends nothing. Hybrid sends redacted text for hard tasks, after you review it.',
+      'The ledger keeps each payload that went to the cloud. "Try redaction" shows what Raven hides in a text.'
+    ]
+  },
+  settings: {
+    title: 'Settings',
+    lines: ['Features and models: what runs on this computer. AI providers: the cloud services and their order.', 'Help has "Copy diagnostics" for a bug report, and "What Raven sends".']
+  },
+  results: {
+    title: 'Search results',
+    lines: ['Raven finds files by name, by words and by meaning. The best matches come first.', 'Type words like "pdf", "last week" or "bigger than 2MB" to filter.']
+  },
+  answer: {
+    title: 'Answer',
+    lines: ['Raven answers from your files and shows the sources. Click a source to open the file.', 'Think harder can use a cloud model, after redaction and your review.']
+  },
+  ask: {
+    title: 'Ask',
+    lines: ['Ask a question about your files. Raven reads the files that match and answers with sources.', 'Files in private folders and media files never go to a cloud model.']
+  }
+}
+
+function ScreenHelp() {
+  const screen = useApp((s) => s.screen)
+  const h = SCREEN_HELP[screen]
+  if (!h) return null
+  return (
+    <div className="anim-row mt-6 max-w-[760px] border-l-2 border-accent pl-4" style={stagger(3)}>
+      <div className="label mb-1">This screen: {h.title}</div>
+      {h.lines.map((l) => (
+        <p key={l} className="text-[13px] leading-snug text-muted">
+          {l}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 function Guide({ onClose, onTour }: { onClose: () => void; onTour: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -295,6 +357,7 @@ function Guide({ onClose, onTour }: { onClose: () => void; onTour: () => void })
                 Press <kbd className="kbd">?</kbd> any time to open this guide.
               </span>
             </div>
+            <ScreenHelp />
           </div>
           <button className="link mt-2 text-muted hover:text-text" onClick={onClose} aria-label="Close guide">
             Close  ✕

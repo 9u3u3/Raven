@@ -1,4 +1,4 @@
-# Build Raven for Linux (AppImage), Windows (NSIS installer) and macOS (dmg).
+# Build Raven for Linux (AppImage) and Windows (NSIS installer). macOS (dmg) comes back with its own phase.
 # PyInstaller cannot build for another OS, so each OS builds its own sidecar.
 # It runs on a version tag (v0.3.0) or by hand (Actions, Build, Run workflow). A normal push does not run it.
 #
@@ -8,6 +8,7 @@
 #   macOS:   MAC_CSC_LINK (the .p12 file as base64), MAC_CSC_KEY_PASSWORD, and for notarization
 #            APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID.
 # Each run also makes SHA256SUMS.txt. A tag run puts the builds and the sums in a draft release.
+# After the build, scripts/smoke_package.py installs and starts the package on the runner (PLAN4 R5).
 name: Build
 
 on:
@@ -20,7 +21,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2022, macos-14]
+        # ubuntu-22.04: an AppImage built on an old glibc runs on newer systems too.
+        os: [ubuntu-22.04, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -35,10 +37,9 @@ jobs:
           uv sync --dev
           uv run pyinstaller packaging/raven-core.spec --noconfirm --distpath dist --workpath build
 
-      # The tests use Linux paths and the FreeDesktop trash. Windows and macOS are not tested yet.
       - name: Sidecar tests
-        if: runner.os == 'Linux'
         working-directory: core
+        timeout-minutes: 25
         run: uv run pytest -q
 
       - uses: pnpm/action-setup@v4
@@ -68,13 +69,30 @@ jobs:
           pnpm exec electron-vite build
           pnpm exec electron-builder --publish never
 
+      # Install, start and stop the package. Linux needs a display for Electron: Xvfb.
+      - name: Smoke test
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get install -y -q xvfb
+            xvfb-run -a -s "-screen 0 1440x900x24" core/.venv/bin/python core/scripts/smoke_package.py app/release smoke
+          else
+            core/.venv/Scripts/python.exe core/scripts/smoke_package.py app/release smoke
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ matrix.os }}
+          path: smoke
+          if-no-files-found: ignore
+
       - uses: actions/upload-artifact@v4
         with:
           name: raven-${{ matrix.os }}
           path: |
             app/release/*.AppImage
             app/release/*.exe
-            app/release/*.dmg
           if-no-files-found: error
 
   sums:
