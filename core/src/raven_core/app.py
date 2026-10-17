@@ -64,6 +64,9 @@ async def lifespan(app: FastAPI):
     else:
         log.info("the index is encrypted and locked: waiting for the passphrase")
     _write_discovery()
+    import faulthandler
+
+    faulthandler.cancel_dump_traceback_later()  # the start is done (logs.setup)
     yield
     _remove_discovery()
     from .memory import unload_ollama

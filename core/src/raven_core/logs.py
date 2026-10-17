@@ -31,6 +31,7 @@ MAX_MESSAGE = 2000
 _SKIP = {"ui_tabs", "galaxy", "favorites", "claude_config_dir", "features_seen"}
 
 _crash = None
+START_DUMP_S = float(os.environ.get("RAVEN_START_DUMP", "60"))
 
 
 class _Cut(logging.Filter):
@@ -91,6 +92,9 @@ def setup(level: int = logging.INFO) -> None:
         _crash.write(f"--- start {time.strftime('%Y-%m-%d %H:%M:%S')} pid {os.getpid()}\n")
         _crash.flush()
         faulthandler.enable(file=_crash)
+        # A start that hangs (the port never opens) writes the stack of every thread to crash.log after 60 s.
+        # app.lifespan cancels it when the start is done.
+        faulthandler.dump_traceback_later(START_DUMP_S, exit=False, file=_crash)
     except OSError:
         pass
     log.info("raven-core %s on %s %s, data in %s", config.VERSION, sys.platform, _pf.machine(), _home(str(config.DATA_DIR)))
