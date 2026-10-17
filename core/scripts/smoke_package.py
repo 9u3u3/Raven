@@ -136,8 +136,14 @@ def screenshot(out: Path) -> None:
 
 
 def app_run(app: Path, data: Path, out: Path) -> None:
-    for p in main_logs():
-        p.unlink()
+    # main.log is shared with a normal Raven on this computer: read only what this run adds.
+    start = {p: p.stat().st_size for p in main_logs()}
+
+    def new_text(p: Path) -> str:
+        with open(p, "rb") as f:
+            f.seek(start.get(p, 0))
+            return f.read().decode("utf-8", errors="replace")
+
     env = {**os.environ, "RAVEN_DATA_DIR": str(data / "app")}
     args = [str(app)] + ([] if WIN else ["--no-sandbox"])
     proc = subprocess.Popen(args, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -145,7 +151,7 @@ def app_run(app: Path, data: Path, out: Path) -> None:
     end = time.time() + 150
     while time.time() < end and not ready:
         time.sleep(2)
-        ready = any("sidecar ready" in p.read_text(encoding="utf-8", errors="replace") for p in main_logs())
+        ready = any("sidecar ready" in new_text(p) for p in main_logs())
     check("app starts its sidecar", ready, ", ".join(str(p) for p in main_logs()) or "no main.log")
     time.sleep(8)  # the first paint
     screenshot(out / "app.png")
@@ -165,13 +171,14 @@ def app_run(app: Path, data: Path, out: Path) -> None:
                 pass
     except psutil.NoSuchProcess:
         pass
+    proc.wait(20)  # reap it: a zombie still answers os.kill(pid, 0)
     end = time.time() + 20
     while time.time() < end and sidecar_pids():
         time.sleep(1)
     left = sidecar_pids()
     check("sidecar stops after the app dies", not left, str(left))
     for p in main_logs():
-        shutil.copy(p, out / f"main-{p.parent.parent.name}.log")
+        (out / f"main-{p.parent.parent.name}.log").write_text(new_text(p), encoding="utf-8")
     for p in (data / "app").glob("logs/*.log"):
         shutil.copy(p, out / p.name)
     if proc.stdout:

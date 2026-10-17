@@ -21,6 +21,7 @@ from . import db
 from .fs import ops
 from .privacy import gate, review
 from .storage import protect
+from .platform import below
 
 GROUPS = {
     "Lecture notes": "Study", "Assignment": "Study", "Exam": "Study", "Syllabus": "Study",
@@ -326,7 +327,7 @@ def apply(plan_id: str, items: list[dict]) -> dict:
             if src not in allowed:
                 errors.append(f"{src} is not in the plan")
                 continue
-            if not dst.startswith(root.rstrip("/") + "/"):
+            if not below(dst, root):
                 errors.append(f"{dst} is outside {root}")
                 continue
             if not os.path.lexists(src):

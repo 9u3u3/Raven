@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from .. import db, events
 from ..fs.kinds import ext_of
 from . import protect
+from ..platform import below, disk_bytes, inside
 
 log = logging.getLogger("raven.space")
 
@@ -155,7 +156,8 @@ class Scanner:
                     continue
                 mode = st.st_mode
                 if stat.S_ISDIR(mode):
-                    if st.st_dev != dev:
+                    # Windows: DirEntry.stat() gives st_dev 0, so a mount point is not visible here.
+                    if st.st_dev and st.st_dev != dev:
                         continue  # another file system (mount point)
                     child_cat = inherited
                     if child_cat is None:
@@ -173,7 +175,7 @@ class Scanner:
                         if key in self._seen_inodes:
                             continue
                         self._seen_inodes.add(key)
-                size = st.st_blocks * 512 if hasattr(st, "st_blocks") else st.st_size
+                size = disk_bytes(st)
                 ext = ext_of(de.name)
                 cat = _file_cat(ext, inherited)
                 mtime, atime = int(st.st_mtime), int(st.st_atime)
@@ -237,7 +239,7 @@ class Scanner:
     def _dir_junk(self, child: Node, parent: str, siblings: set[str], inherited: int | None, hidden: bool, proj: bool = False) -> None:
         n = child.name
         idle_days = int((self.now - child.mtime) / DAY)
-        rel = child.path[len(self.home) + 1:] if child.path.startswith(self.home + "/") else None
+        rel = child.path[len(self.home) + 1:].replace("\\", "/") if below(child.path, self.home) else None
         if rel in PACKAGE_CACHES:
             self._add_junk(JunkItem(child.path, child.size, "package-cache", "Package manager or thumbnail cache. Apps download it again when they need it", True, child.mtime))
             return
@@ -340,7 +342,7 @@ class SpaceStore:
                 return  # a partial scan is wrong, so Raven drops it
             # A new scan of a folder replaces scans of folders inside it.
             for k in list(self.results):
-                if k == sc.root or k.startswith(sc.root.rstrip("/") + "/"):
+                if inside(k, sc.root):
                     del self.results[k]
             self.results[sc.root] = res
             from ..compress.candidates import forget_cache
@@ -365,7 +367,7 @@ class SpaceStore:
         path = os.path.abspath(path)
         best = None
         for root, res in self.results.items():
-            if path == root or path.startswith(root.rstrip("/") + "/"):
+            if inside(path, root):
                 if best is None or len(root) > len(best[0]):
                     best = (root, res)
         if best is None:
@@ -408,7 +410,7 @@ class SpaceStore:
                     break
                 cur = os.path.dirname(cur)
         for res in self.results.values():
-            res.junk = [j for j in res.junk if j.path not in gone and not any(j.path.startswith(g + "/") for g in gone)]
+            res.junk = [j for j in res.junk if j.path not in gone and not any(below(j.path, g) for g in gone)]
             res.largest = [x for x in res.largest if x[1] not in gone]
 
     def refresh_paths(self, paths: list[str]) -> None:
@@ -434,7 +436,7 @@ class SpaceStore:
                 cats, ages = child.cats, child.ages
             else:
                 st = os.lstat(path)
-                added = st.st_blocks * 512
+                added = disk_bytes(st)
                 cat = _file_cat(ext_of(path), None)
                 heapq.heappush(pnode.top, (added, os.path.basename(path), int(st.st_mtime), int(st.st_atime), cat))
                 cats = [added if i == cat else 0 for i in range(8)]
@@ -513,7 +515,7 @@ def _du(path: str, deadline: float) -> int | None:
                     if stat.S_ISDIR(st.st_mode):
                         stack.append(de.path)
                     elif stat.S_ISREG(st.st_mode):
-                        total += st.st_blocks * 512 if hasattr(st, "st_blocks") else st.st_size
+                        total += disk_bytes(st)
         except OSError:
             continue
     return total
@@ -538,7 +540,7 @@ def _disk_children(path: str, deadline: float) -> list[dict]:
             if size:
                 out.append({"name": de.name, "path": de.path, "size": size, "is_dir": True, "cat": OTHER, "mtime": int(st.st_mtime) * 1000})
         elif stat.S_ISREG(st.st_mode):
-            size = st.st_blocks * 512 if hasattr(st, "st_blocks") else st.st_size
+            size = disk_bytes(st)
             out.append({"name": de.name, "path": de.path, "size": size, "is_dir": False, "cat": _file_cat(ext_of(de.name), None),
                         "mtime": int(st.st_mtime) * 1000, "atime": int(st.st_atime) * 1000})
     return out

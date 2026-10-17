@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+from ..platform import below
 
 PROJECT_MARKERS = {
     ".git", "package.json", "pyproject.toml", "setup.py", "requirements.txt", "Cargo.toml", "go.mod", "pom.xml",
@@ -154,7 +155,7 @@ def blocked(path: str, stop_at: str, allow_project_root: bool = False) -> bool:
     if not os.path.isdir(cur):
         cur = os.path.dirname(cur)
         first = False
-    while cur and cur != stop_at and cur.startswith(stop_at.rstrip("/") + "/"):
+    while cur and cur != stop_at and below(cur, stop_at):
         if is_software_dir(cur):
             return True
         if is_project_root(cur) and not (first and allow_project_root):

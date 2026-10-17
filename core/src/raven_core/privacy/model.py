@@ -61,7 +61,7 @@ class PrivacyFilter:
             from tokenizers import Tokenizer
 
             t0 = time.perf_counter()
-            cfg = json.loads((MODEL_DIR / "config.json").read_text())
+            cfg = json.loads((MODEL_DIR / "config.json").read_text(encoding="utf-8"))
             self._labels = [cfg["id2label"][str(i)] for i in range(len(cfg["id2label"]))]
             opts = ort.SessionOptions()
             # Few threads: the model must not starve the local LLM or the UI (it runs on the CPU). PLAN4 B7: 4 threads

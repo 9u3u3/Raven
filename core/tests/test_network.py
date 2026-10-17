@@ -10,6 +10,8 @@ import textwrap
 
 import pytest
 
+pytestmark = pytest.mark.skipif(os.name == "nt", reason="the fake gio and smbclient programs are shell scripts (Linux shares go through gvfs)")
+
 _tmp = tempfile.mkdtemp(prefix="raven-test-")
 os.environ.setdefault("RAVEN_DATA_DIR", os.path.join(_tmp, "data"))
 os.environ.setdefault("XDG_DATA_HOME", os.path.join(_tmp, "xdg"))

@@ -185,7 +185,7 @@ def _engine(route: Route, src: str, dst_ext: str) -> list[str] | dict:
                     text = pdf.page_text(page).strip()
                     parts.append((f"## Page {i + 1}\n\n" if dst_ext == "md" else f"--- page {i + 1} ---\n") + text)
                 out = _out(src, dst_ext)
-                Path(out).write_text("\n\n".join(parts) + "\n")
+                Path(out).write_text("\n\n".join(parts) + "\n", encoding="utf-8")
                 return [out]
             folder = ops.unique_path(str(Path(src).with_name(Path(src).stem + " pages")))
             os.mkdir(folder)

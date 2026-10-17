@@ -38,8 +38,8 @@ def home(tmp_path):
 
 
 def _indexed(root: Path) -> set[str]:
-    rows = db.conn().execute("SELECT path FROM files WHERE path LIKE ?", (f"{root}/%",)).fetchall()
-    return {os.path.relpath(r[0], root) for r in rows}
+    rows = db.conn().execute("SELECT path FROM files WHERE path LIKE ?", (f"{root}{os.sep}%",)).fetchall()
+    return {os.path.relpath(r[0], root).replace(os.sep, "/") for r in rows}
 
 
 def test_private_implies_the_other_rules(home):

@@ -19,6 +19,7 @@ from pathlib import Path
 from rapidfuzz import fuzz, process, utils
 
 from .. import config, db
+from ..platform import depth, inside, path_key
 
 log = logging.getLogger("raven.diskdirs")
 
@@ -100,7 +101,7 @@ class DiskDirs:
     def tops(self) -> list[str]:
         tops = [str(Path.home())]
         for r in db.get_setting("index_roots", []):
-            if not any(r == t or r.startswith(t.rstrip("/") + "/") for t in tops):
+            if not any(inside(r, t) for t in tops):
                 tops.append(r)
         return tops
 
@@ -208,12 +209,12 @@ class DiskDirs:
             if score > best.get(i, (-1, None, 0))[0]:
                 best[i] = (score, via, share)
         def in_tests(i: int) -> bool:
-            return any(part in TEST_PARTS for part in paths[i].split("/")[:-1])
+            return any(part in TEST_PARTS for part in path_key(paths[i]).split("/")[:-1])
 
         # A folder in a test tree last. Ties: a project root first, then a folder whose own name matched,
         # then the shorter path.
         ranked = sorted(best.items(), key=lambda kv: (in_tests(kv[0]), -kv[1][0], kv[0] not in project,
-                                                      kv[1][1] is not None, paths[kv[0]].count("/")))
+                                                      kv[1][1] is not None, depth(paths[kv[0]])))
         out = []
         per_name: dict[str, int] = {}
         for i, (s, via, share) in ranked:

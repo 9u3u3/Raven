@@ -18,6 +18,43 @@ IS_MAC = sys.platform == "darwin"
 IS_LINUX = sys.platform.startswith("linux")
 
 
+def path_key(p: str) -> str:
+    """A path in the form for comparisons: "/" between the parts and no "/" at the end. Windows: "\\" also
+    counts as a separator, and case does not count (NTFS and the Windows API ignore case)."""
+    if IS_WIN:
+        p = p.replace("\\", "/").lower()
+    return p.rstrip("/")
+
+
+def inside(path: str, root: str) -> bool:
+    """True when `path` is `root` or below it. Works with "/" and "\\" and on a root like "/" or "C:\\"."""
+    a, r = path_key(path), path_key(root)
+    return a == r or a.startswith(r + "/")
+
+
+def below(path: str, root: str) -> bool:
+    """True when `path` is below `root`, not `root` itself."""
+    return path_key(path) != path_key(root) and inside(path, root)
+
+
+def depth(path: str) -> int:
+    """The number of separators in a path, "/" or "\\"."""
+    return path_key(path).count("/")
+
+
+def subtree_range(root: str) -> tuple[str, str]:
+    """(lo, hi) for a SQL range `path >= lo AND path < hi` over the paths below `root` in the index. The index
+    keeps native paths, so the separator is os.sep."""
+    r = root.rstrip("/\\")
+    return r + os.sep, r + chr(ord(os.sep) + 1)
+
+
+def disk_bytes(st: os.stat_result) -> int:
+    """The space a file uses on the disk. Windows has no st_blocks: use the size."""
+    blocks = getattr(st, "st_blocks", None)
+    return blocks * 512 if blocks is not None else st.st_size
+
+
 def trim_memory() -> None:
     """Give freed memory back to the system after a model unloads (glibc keeps it otherwise)."""
     import gc

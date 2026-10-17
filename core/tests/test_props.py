@@ -32,6 +32,7 @@ def test_parse_mode_rejects_junk():
         props.parse_mode("rwx!", 0o100644)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX modes and system folders")
 def test_chmod_recursive_undo_redo(tmp_path):
     d = tmp_path / "d"
     (d / "sub").mkdir(parents=True)
@@ -92,6 +93,7 @@ def test_links_and_broken(tmp_path):
         props.make_link(str(tmp_path), kind="hard")
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX modes and system folders")
 def test_explain():
     assert props.explain("/etc")["level"] == "system"
     assert props.explain("/boot")["level"] == "danger"
@@ -128,6 +130,7 @@ def test_filters_parse():
     assert "is_hidden = 1" in f.sql()[0]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX modes and system folders")
 def test_perm_filter(tmp_path):
     f = tmp_path / "run.sh"
     f.write_text("#!/bin/sh\n")

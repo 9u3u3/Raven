@@ -16,6 +16,7 @@ from .. import config
 from ..fs.atime import keep_atime
 from ..storage import protect
 from ..storage.scan import CACHES, CODEDEPS, store
+from ..platform import below, inside
 
 DAY = 86400
 SAMPLE = 1024 * 1024
@@ -180,7 +181,7 @@ def candidates(path: str, cold_days: int = 90, limit: int = 12) -> list[dict]:
                 stack.append((ch, False))
     local_files.sort(reverse=True)
     for size, p, mtime, atime, cat in local_files[:5000]:
-        if any(p.startswith(t + "/") for t in taken):
+        if any(below(p, t) for t in taken):
             continue
         if protect.blocked(p, path):
             continue
@@ -252,11 +253,11 @@ def _stop_at(path: str) -> str:
     `path` (the user declared it as content), else the home folder, else the root."""
     from ..index.indexer import roots
 
-    held = [r for r in roots() if path == r or path.startswith(r.rstrip("/") + "/")]
+    held = [r for r in roots() if inside(path, r)]
     if held:
         return os.path.dirname(max(held, key=len))
     home = os.path.expanduser("~")
-    return home if path.startswith(home + "/") else "/"
+    return home if below(path, home) else os.path.abspath(os.sep)
 
 
 def forget_cache() -> None:

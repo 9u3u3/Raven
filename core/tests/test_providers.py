@@ -142,7 +142,7 @@ def test_seal_fails_closed_without_the_privacy_filter(monkeypatch):
 
 
 def _imports(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     out = set()
     for n in ast.walk(tree):
         if isinstance(n, ast.ImportFrom):
@@ -355,6 +355,7 @@ def test_claude_env_picks_the_account(monkeypatch):
     assert "CLAUDE_CONFIG_DIR" not in cloud.claude_env()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="claude -p is a Linux development path (pwd)")
 def test_claude_env_uses_the_real_sign_in_when_home_is_a_demo_folder(tmp_path, monkeypatch):
     """With HOME set to a demo folder that has no Claude sign-in, claude -p uses the one in the real home."""
     import pwd

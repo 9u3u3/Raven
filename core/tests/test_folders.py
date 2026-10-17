@@ -44,7 +44,7 @@ def setup_module():
 
 
 def _paths(q: str) -> list[str]:
-    return [os.path.relpath(r["path"], ROOT) for r in folders.search(q, home=str(ROOT))["results"]]
+    return [os.path.relpath(r["path"], ROOT).replace(os.sep, "/") for r in folders.search(q, home=str(ROOT))["results"]]
 
 
 def test_profile_holds_kinds_and_names():

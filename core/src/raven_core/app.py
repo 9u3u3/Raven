@@ -142,7 +142,7 @@ def _write_discovery() -> None:
     if not port or not TOKEN:
         return
     fd = os.open(DISCOVERY, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump({"port": int(port), "token": TOKEN, "pid": os.getpid()}, f)
 
 
@@ -150,7 +150,7 @@ def _remove_discovery() -> None:
     import json
 
     try:
-        if json.loads(DISCOVERY.read_text()).get("pid") == os.getpid():
+        if json.loads(DISCOVERY.read_text(encoding="utf-8")).get("pid") == os.getpid():
             DISCOVERY.unlink()
     except (OSError, ValueError):
         pass

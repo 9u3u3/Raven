@@ -64,7 +64,7 @@ class Gliner:
             from tokenizers import Tokenizer
 
             t0 = time.perf_counter()
-            cfg = json.loads((MODEL_DIR / "gliner_config.json").read_text())
+            cfg = json.loads((MODEL_DIR / "gliner_config.json").read_text(encoding="utf-8"))
             if cfg.get("span_mode") != "markerV0" or cfg.get("subtoken_pooling", "first") != "first":
                 raise ValueError(f"unsupported GLiNER config: {cfg.get('span_mode')}, {cfg.get('subtoken_pooling')}")
             self.max_width = int(cfg.get("max_width") or 12)

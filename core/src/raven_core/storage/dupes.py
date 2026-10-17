@@ -228,9 +228,10 @@ class DupeJob:
                                 continue
                             stack.append(de.path)
                         elif stat.S_ISREG(st.st_mode) and st.st_size >= min_size and not protect.is_backup_name(de.name):
+                            # A hard link is not a duplicate copy. Windows: DirEntry.stat() gives st_ino 0, no check.
                             key = (st.st_dev, st.st_ino)
-                            if key in seen_inodes:
-                                continue  # a hard link is not a duplicate copy
+                            if st.st_ino and key in seen_inodes:
+                                continue
                             seen_inodes.add(key)
                             by_size[st.st_size].append((de.path, int(st.st_mtime)))
                             if st.st_size >= NEAR_MIN_SIZE and de.name.rsplit(".", 1)[-1].lower() in PHOTO_EXTS and len(photos) < NEAR_LIMIT:

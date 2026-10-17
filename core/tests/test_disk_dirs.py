@@ -34,7 +34,7 @@ def scanned() -> DiskDirs:
 
 
 def rel(results):
-    return [os.path.relpath(p, HOME) for p, *_ in results]
+    return [os.path.relpath(p, HOME).replace(os.sep, "/") for p, *_ in results]
 
 
 def test_project_name_finds_the_repo_first():

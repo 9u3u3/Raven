@@ -113,7 +113,7 @@ def create_archive(method: str, root: str, rels: list[str], dst: str, manifest: 
 def _create_archive(method: str, root: str, rels: list[str], dst: str, manifest: str) -> None:
     with tempfile.TemporaryDirectory(prefix=".raven-", dir=os.path.dirname(dst)) as tmp:
         mpath = os.path.join(tmp, MANIFEST)
-        Path(mpath).write_text(manifest)
+        Path(mpath).write_text(manifest, encoding="utf-8")
         if method == "7z":
             _run(["7z", "a", "-t7z", "-mx=7", "-snl", "-mtm=on", "-y", dst, "--", *rels], cwd=root)
             _run(["7z", "a", "-t7z", "-y", dst, MANIFEST], cwd=tmp)

@@ -70,7 +70,9 @@ def test_trash_undo_redo(tree):
     p = tree / "a" / "sub"
     ops.trash([str(p)])
     assert not p.exists()
-    trash_files = os.path.join(os.environ["XDG_DATA_HOME"], "Trash", "files")
+    from raven_core.platform import trash_home
+
+    trash_files = os.path.join(trash_home(), "files")
     assert "sub" in os.listdir(trash_files)
     ops.undo()
     assert (p / "two.txt").read_text() == "two"
@@ -84,7 +86,9 @@ def test_trash_undo_redo(tree):
 def test_delete_in_the_trash_removes_the_info_file(tree):
     p = tree / "a" / "one.txt"
     ops.trash([str(p)])
-    trash = os.path.join(os.environ["XDG_DATA_HOME"], "Trash")
+    from raven_core.platform import trash_home
+
+    trash = str(trash_home())
     name = next(n for n in os.listdir(os.path.join(trash, "files")) if n.startswith("one"))
     assert os.path.exists(os.path.join(trash, "info", f"{name}.trashinfo"))
     with pytest.raises(ops.OpError, match="in the trash already"):

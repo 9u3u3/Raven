@@ -32,7 +32,7 @@ def _tree(base: Path) -> Path:
 
 
 def _rows(root: Path) -> dict[str, tuple[int, int]]:
-    return {os.path.relpath(r[0], root): (r[1], r[2]) for r in db.conn().execute(
+    return {os.path.relpath(r[0], root).replace(os.sep, "/"): (r[1], r[2]) for r in db.conn().execute(
         "SELECT path, index_stage, light FROM files WHERE root=? AND is_dir=0", (str(root),))}
 
 

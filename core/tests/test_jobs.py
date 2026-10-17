@@ -90,7 +90,9 @@ def test_restore_from_trash_and_undo(tmp_path):
     p = tmp_path / "keep.txt"
     p.write_text("x")
     ops.trash([str(p)])
-    trashed = os.path.join(os.environ["XDG_DATA_HOME"], "Trash", "files", "keep.txt")
+    from raven_core.platform import trash_home
+
+    trashed = os.path.join(trash_home(), "files", "keep.txt")
     assert os.path.exists(trashed) and not p.exists()
     back = ops.restore([trashed])
     assert back == [str(p)] and p.read_text() == "x"

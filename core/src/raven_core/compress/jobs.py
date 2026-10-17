@@ -23,6 +23,7 @@ from ..fs import ops
 from ..fs.trash import move_to_trash
 from . import methods as m
 from .methods import ARCHIVE_METHODS, FILE_METHODS, LOSSY_METHODS, LOSSY_TOOLS, CompressError, Item
+from ..platform import inside
 
 log = logging.getLogger("raven.compress")
 
@@ -52,7 +53,7 @@ def compress(root: str, paths: list[str], method: str, label: str | None = None,
     for p in paths:
         if not os.path.lexists(p):
             raise CompressError(f"Not found: {p}")
-        if not (p == root or p.startswith(root.rstrip("/") + "/")):
+        if not inside(p, root):
             raise CompressError(f"{p} is not inside {root}")
     lossy = method in LOSSY_METHODS
     if method not in ARCHIVE_METHODS and method not in FILE_METHODS and not lossy:

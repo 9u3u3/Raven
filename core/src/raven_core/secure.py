@@ -36,14 +36,14 @@ _key: dict[str, str | None] = {"pass": None}
 
 def _marker() -> dict:
     try:
-        return json.loads(MARKER.read_text())
+        return json.loads(MARKER.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"enabled": False}
 
 
 def _write_marker(m: dict) -> None:
     tmp = MARKER.with_suffix(".tmp")
-    tmp.write_text(json.dumps(m))
+    tmp.write_text(json.dumps(m), encoding="utf-8")
     os.replace(tmp, MARKER)
 
 

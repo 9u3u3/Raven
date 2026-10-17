@@ -5,6 +5,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 HELPER = os.path.join(os.path.dirname(__file__), "..", "src", "raven_core", "fs", "elevate_helper.py")
 
 
@@ -23,6 +25,7 @@ def test_operations(tmp_path):
     assert sorted(p.name for p in tmp_path.iterdir()) == ["a.txt", "d"]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="pkexec and POSIX system folders")
 def test_refuses_system_and_relative_paths(tmp_path):
     code, out = run({"op": "delete", "src": "/etc"})
     assert code == 1 and "does not change" in out["error"]

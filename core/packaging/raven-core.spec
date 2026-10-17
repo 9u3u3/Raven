@@ -34,5 +34,6 @@ a = Analysis(
     noarchive=False,
 )
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="raven-core", console=True, upx=False)
+# Python UTF-8 mode: open() and read_text() use UTF-8 on Windows too, not the code page (cp1252).
+exe = EXE(pyz, a.scripts, [("X utf8", None, "OPTION")], exclude_binaries=True, name="raven-core", console=True, upx=False)
 coll = COLLECT(exe, a.binaries, a.datas, name="raven-core", upx=False)

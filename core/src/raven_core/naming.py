@@ -26,6 +26,7 @@ from datetime import datetime
 from . import db
 from .fs import ops
 from .fs.kinds import ext_of, kind_info
+from .platform import below
 
 log = logging.getLogger("raven.naming")
 
@@ -397,7 +398,7 @@ def count_generic(root: str | None = None) -> tuple[int, int]:
     q = "SELECT name, size, path FROM files WHERE is_dir=0 AND light=0"
     n = size = 0
     for name, sz, path in c.execute(q):
-        if root and not (path.startswith(root.rstrip("/") + "/")):
+        if root and not below(path, root):
             continue
         if is_generic(name):
             n += 1

@@ -16,7 +16,9 @@ def _gb(n: int) -> str:
 
 
 def _inside(path: str, root: str) -> bool:
-    return path == root or path.startswith(root.rstrip("/") + "/")
+    from ..platform import inside
+
+    return inside(path, root)
 
 
 RULES = {

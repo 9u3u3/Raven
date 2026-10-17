@@ -302,7 +302,9 @@ def status() -> dict:
 
 
 def _inside(path: str, root: str) -> bool:
-    return path == root or path.startswith(root.rstrip("/") + "/")
+    from .platform import inside
+
+    return inside(path, root)
 
 
 def graph(root: str | None = None, types: list[str] | None = None, limit: int = NODE_LIMIT, orphans: bool = False) -> dict:
@@ -453,14 +455,16 @@ def for_path(path: str, types: list[str] | None = None, limit: int = PATH_LIMIT)
 
     seen_dirs = {f["parent"] for f in files} | {root}
     for d in dirs:
-        if d != root and any(x == d or x.startswith(d + "/") for x in seen_dirs):
+        if d != root and any(_inside(x, d) for x in seen_dirs):
             add(os.path.dirname(d), d, "folder")
     for f in files:
         add(f["parent"], f["id"], "folder")
 
     # Text: the index has it for indexed files. Small text files are read from the disk.
     c = db.conn()
-    lo, hi = root.rstrip("/") + "/", root.rstrip("/") + "0"
+    from .platform import subtree_range
+
+    lo, hi = subtree_range(root)
     indexed = {r["path"]: r["id"] for r in c.execute("SELECT id, path FROM files WHERE is_dir=0 AND path >= ? AND path < ?", (lo, hi))}
     ix = _Index(files)
     if "ref" in types or "mention" in types:

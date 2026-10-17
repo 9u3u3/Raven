@@ -138,6 +138,8 @@ async function startSidecar(): Promise<void> {
     env: {
       ...process.env,
       PYTHONUNBUFFERED: '1',
+      // UTF-8 for text files on Windows too (the frozen build sets it as well, in the spec).
+      PYTHONUTF8: '1',
       MALLOC_ARENA_MAX: process.env.MALLOC_ARENA_MAX ?? '2',
       RAVEN_PARENT_PID: String(process.pid),
       RAVEN_TOKEN: cfg.token,

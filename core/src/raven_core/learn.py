@@ -110,9 +110,13 @@ def note_plan_edits(root: str, moves: list, applied: list[dict]) -> dict[str, st
         m = suggested.get(os.path.abspath(it["src"]))
         if m is None or not m.category or not m.move:
             continue
-        want = os.path.relpath(os.path.dirname(os.path.abspath(it["dst"])), root)
-        had = os.path.relpath(os.path.dirname(m.dst), root)
-        if want != had and want != "." and not want.startswith(".."):
+        try:
+            want = os.path.relpath(os.path.dirname(os.path.abspath(it["dst"])), root)
+            had = os.path.relpath(os.path.dirname(m.dst), root)
+        except ValueError:  # Windows: another drive
+            continue
+        want = want.replace(os.sep, "/")  # the same form on every system
+        if want != had.replace(os.sep, "/") and want != "." and not want.startswith(".."):
             prefs[m.category] = want
             changed[m.category] = want
     if changed:

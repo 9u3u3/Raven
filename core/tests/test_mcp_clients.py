@@ -20,7 +20,9 @@ ENTRY = {"command": "/opt/raven/raven-core", "args": ["--mcp"]}
 @pytest.fixture()
 def home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows: the home folder
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / ".config"))  # Windows: the app settings folder
     monkeypatch.setattr(mcp_clients, "_claude_cli", lambda: None)
     return tmp_path
 

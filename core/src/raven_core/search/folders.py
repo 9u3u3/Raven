@@ -29,6 +29,7 @@ from ..fs.kinds import kind_of
 from ..index import embed
 from .filters import parse
 from .hybrid import MIN_SIM, REL_SIM, RRF_K, _fts_query
+from ..platform import below, depth
 
 log = logging.getLogger("raven.folders")
 
@@ -113,9 +114,8 @@ def _has_vec() -> bool:
 
 def _ancestors(path: str, root: str):
     """Yield the folders above `path`, up to and without the index root."""
-    root = root.rstrip("/")
     p = os.path.dirname(path)
-    while p and p != root and p.startswith(root + "/"):
+    while p and below(p, root):
         yield p
         p = os.path.dirname(p)
 
@@ -401,7 +401,8 @@ def status() -> dict:
 # ---------------------------------------------------------------- search
 
 
-PATHLIKE = re.compile(r"^(~|/|\\\\|[a-z]+://)", re.I)
+# Windows also: "C:\\" and "C:/".
+PATHLIKE = re.compile(r"^(~|/|\\\\|[a-z]+://|[a-z]:[\\/])", re.I)
 NET = re.compile(r"^(smb|sftp|ssh|ftp|ftps|dav|davs|webdav|nfs|afp)://|^\\\\", re.I)
 
 
@@ -412,15 +413,16 @@ def path_results(q: str, home: str, hidden: bool = False, limit: int = 12) -> li
         return [{"path": q, "name": q, "parent": "", "why": "connect", "files": None, "size": None, "mtime": 0,
                  "summary": "Connect to this server and open it", "top": []}]
     p = q
-    if p == "~" or p.startswith("~/"):
+    if p == "~" or p.startswith(("~/", "~\\")):
         p = home + p[1:]
     p = os.path.expandvars(p)
     out = []
-    if os.path.isdir(p) and (q.endswith("/") or p == "/"):
+    ends = q.endswith(("/", "\\"))
+    if os.path.isdir(p) and (ends or p == os.path.dirname(p)):
         base, prefix = p, ""
     else:
-        base, prefix = os.path.dirname(p) or "/", os.path.basename(p)
-    if os.path.isdir(p) and not q.endswith("/"):
+        base, prefix = os.path.dirname(p) or os.sep, os.path.basename(p)
+    if os.path.isdir(p) and not ends:
         out.append(_path_row(p, "path"))
     try:
         with os.scandir(base) as it:
@@ -489,7 +491,7 @@ def _words(text: str) -> list[str]:
 def _name_hits(text: str, limit: int = 50) -> list[tuple[str, float]]:
     """Folder paths whose name matches, each with a weight: the share of the query that the name explains."""
     s = _dir_names()
-    if "/" in text:
+    if "/" in text or "\\" in text:
         # A path fragment such as "sem3/drone": match the end of the full path.
         q = utils.default_process(text)
         hits = process.extract(q, s["rel"], scorer=fuzz.partial_ratio, limit=limit, score_cutoff=80, processor=None)
@@ -662,7 +664,7 @@ def _prefer_specific(fused: dict[str, dict], cover: dict[str, float]) -> None:
     """A parent folder holds the names of all its subfolders, so it often matches as well as the right subfolder.
     When a subfolder keeps most of the parent's score and holds as many of the query words, the subfolder is
     the answer: it goes just above the parent."""
-    for path in sorted(fused, key=lambda p: p.count("/"), reverse=True):
+    for path in sorted(fused, key=depth, reverse=True):
         e = fused[path]
         p = os.path.dirname(path)
         while p and p != os.path.dirname(p):  # the root is its own parent ("/", "C:\\")

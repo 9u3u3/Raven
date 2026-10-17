@@ -38,7 +38,7 @@ class RavenDown(ToolError):
 
 def _call(method: str, path: str, **kw) -> dict:
     try:
-        with open(os.path.join(DATA_DIR, "sidecar.json")) as f:
+        with open(os.path.join(DATA_DIR, "sidecar.json"), encoding="utf-8") as f:
             cfg = json.load(f)
     except (OSError, ValueError) as e:
         raise RavenDown("Raven is not running. Ask the user to start Raven.") from e

@@ -27,6 +27,7 @@ from ..convert import registry as conv
 from ..fs import ops
 from ..fs.kinds import ext_of
 from ..index.indexer import roots as index_roots
+from ..platform import below, depth, path_key
 
 MAX_STEPS = 20
 MAX_FILES = 2000
@@ -97,7 +98,7 @@ def _note(s: Step, i: Item, home: str) -> str:
     def t(p: str | None) -> str:
         if not p:
             return ""
-        return "~" + p[len(home):] if home and p.startswith(home + "/") else p
+        return "~" + p[len(home):].replace("\\", "/") if home and below(p, home) else p
     if s.op in ("convert", "move", "copy", "compress", "extract"):
         return "→ " + t(i.dst)
     if s.op == "rename":
@@ -125,7 +126,7 @@ class Context:
 
         # gvfs mounts the user's shares below /run/user/<uid>/gvfs: a share, not a system folder.
         user_share = _within(p, str(gvfs_dir())) and p != str(gvfs_dir())
-        if any(p == d or p.startswith(d + "/") for d in SYSTEM_DIRS) and not p.startswith(self.home + "/") and not user_share:
+        if any(_within(p, d) for d in SYSTEM_DIRS) and not below(p, self.home) and not user_share:
             return False
         from ..storage.protect import user_protected
         from ..privacy.scope import is_private
@@ -137,7 +138,9 @@ class Context:
 
 
 def _within(p: str, base: str) -> bool:
-    return p == base or p.startswith(base.rstrip("/") + "/")
+    from ..platform import inside
+
+    return inside(p, base)
 
 
 # ---------------------------------------------------------------- folder names
@@ -187,11 +190,11 @@ def _resolve_folder(name: str, ctx: Context) -> str | None:
     rows = db.conn().execute(
         "SELECT path FROM files WHERE is_dir=1 AND name = ? COLLATE NOCASE", (parts[-1],)
     ).fetchall()
-    cands = [r[0] for r in rows if "/".join(parts).lower() in r[0].lower() and os.path.isdir(r[0])]
+    cands = [r[0] for r in rows if path_key("/".join(parts)) in path_key(r[0]) and os.path.isdir(r[0])]
     if cands:
         def dist(p: str) -> tuple:
             common = os.path.commonpath([p, ctx.cwd]) if ctx.cwd else "/"
-            return (-len(common), p.count("/"), p)
+            return (-len(common), depth(p), p)
         return sorted(cands, key=dist)[0]
     return None
 
@@ -286,11 +289,11 @@ def _find(st: dict, ctx: Context) -> list[Item]:
                 continue
             out.append(Item(de.path, de.path, _size(de.path), de.is_dir(follow_symlinks=False)))
         return out
-    base_depth = folder.rstrip("/").count("/")
+    base_depth = depth(folder)
     for dp, dns, fns in os.walk(folder):
         dns[:] = sorted(d for d in dns if not d.startswith(".") and d not in ("node_modules", "__pycache__")
                         and not is_private(os.path.join(dp, d)))
-        if dp.count("/") - base_depth >= FIND_DEPTH:
+        if depth(dp) - base_depth >= FIND_DEPTH:
             dns[:] = []
         for fn in sorted(fns):
             if fn.startswith("."):

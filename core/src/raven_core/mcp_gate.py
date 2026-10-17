@@ -26,6 +26,7 @@ from starlette.concurrency import run_in_threadpool
 from .privacy.scope import is_media, is_private
 from . import db
 from .privacy import gate
+from .platform import inside
 
 router = APIRouter(prefix="/mcp")
 HOME = str(Path.home())
@@ -47,8 +48,8 @@ REAL_HOME = os.path.realpath(HOME)
 def _out(path: str) -> str:
     # _in() resolves links, so a path can start with the real home (/var/home/... on some systems).
     for h in (HOME, REAL_HOME):
-        if path == h or path.startswith(h + "/"):
-            return "~" + path[len(h):]
+        if inside(path, h):
+            return "~" + path[len(h):].replace("\\", "/")
     return path
 
 
@@ -61,7 +62,7 @@ def _in(path: str) -> str:
     hidden_ok = bool(db.get_setting("index_hidden", False))
     p = os.path.realpath(os.path.expanduser(path))
     roots = [os.path.realpath(r) for r in db.get_setting("index_roots", [])]
-    root = next((r for r in roots if p == r or p.startswith(r.rstrip("/") + "/")), None)
+    root = next((r for r in roots if inside(p, r)), None)
     if root is None:
         raise HTTPException(403, "Raven shares only files inside its indexed folders.")
     parts = Path(os.path.relpath(p, root)).parts if p != root else ()

@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 
 from .. import db
+from ..platform import inside
 
 SCHEMES = {"smb", "sftp", "ftp", "ftps", "dav", "davs", "nfs", "afp"}
 ALIASES = {"ssh": "sftp", "webdav": "dav", "webdavs": "davs", "cifs": "smb"}
@@ -448,7 +449,7 @@ def is_network(path: str) -> bool:
     if p.startswith(("\\\\", "//")):
         return True
     for m in _net_mounts():
-        if p == m or p.startswith(m.rstrip("/") + "/"):
+        if inside(p, m):
             return True
     return False
 

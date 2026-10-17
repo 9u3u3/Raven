@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 from .. import db, events
+from ..platform import disk_bytes
 from ..fs import ops
 from ..fs.atime import keep_atime
 from . import protect
@@ -92,7 +93,7 @@ def du(path: str, budget_s: float = 8.0) -> int:
     except OSError:
         return 0
     if not os.path.isdir(path):
-        return st.st_blocks * 512
+        return disk_bytes(st)
     stack = [path]
     while stack:
         d = stack.pop()
@@ -103,7 +104,7 @@ def du(path: str, budget_s: float = 8.0) -> int:
                         s = e.stat(follow_symlinks=False)
                     except OSError:
                         continue
-                    total += s.st_blocks * 512
+                    total += disk_bytes(s)
                     if e.is_dir(follow_symlinks=False):
                         stack.append(e.path)
         except OSError:
@@ -137,7 +138,9 @@ def _running(names: tuple[str, ...]) -> bool:
 
 
 def _inside(path: str, root: str) -> bool:
-    return path == root or path.startswith(root.rstrip("/") + "/")
+    from ..platform import inside
+
+    return inside(path, root)
 
 
 def _row(rid, source, line, items, safety, action, reversible, **kw) -> dict:

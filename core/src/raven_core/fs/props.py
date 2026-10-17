@@ -18,6 +18,7 @@ from pathlib import Path
 
 from .. import db
 from . import ops
+from ..platform import inside
 
 TAG_XATTR = "user.xdg.tags"
 MAX_ITEMS = 20_000  # a recursive change touches at most this many items
@@ -66,7 +67,8 @@ def apply_attr(path: str, what: str, value, elevated: bool = False) -> None:
         else:
             os.chmod(path, value)  # Linux has no lchmod: set_mode skips links
     elif what == "times":
-        os.utime(path, ns=(value[0], value[1]), follow_symlinks=False)
+        # Windows has no utime on a link itself: the times go to the file.
+        os.utime(path, ns=(value[0], value[1]), follow_symlinks=os.utime not in os.supports_follow_symlinks)
     elif what == "owner":
         import grp
         import pwd
@@ -539,7 +541,7 @@ def policy_for(path: str, flag: str) -> bool:
     p = os.path.abspath(path)
     implied = flag in PRIVATE_IMPLIES
     for r in _policy_cache["rows"]:
-        if (r[flag] or (implied and r["private"])) and (p == r["path"] or p.startswith(r["path"].rstrip("/") + "/")):
+        if (r[flag] or (implied and r["private"])) and inside(p, r["path"]):
             return True
     return False
 
@@ -659,6 +661,8 @@ def secure_delete(paths: list[str]) -> dict:
 
 
 def _rotational(path: str) -> bool | None:
+    if not hasattr(os, "major"):
+        return None  # Windows: no /sys, the type of the drive is not known
     try:
         dev = os.stat(os.path.dirname(os.path.abspath(path))).st_dev
         name = Path(f"/sys/dev/block/{os.major(dev)}:{os.minor(dev)}").resolve().name

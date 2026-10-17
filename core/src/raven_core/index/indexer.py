@@ -26,6 +26,7 @@ from ..privacy import rules as pii_rules
 from . import embed
 from .chunk import chunk_section, header
 from .extract import can_extract, extract
+from ..platform import below, inside
 
 log = logging.getLogger("raven.index")
 
@@ -133,8 +134,7 @@ def _private(path: str) -> bool:
 
 def _inside_skipped(path: str, root: str) -> bool:
     cur = os.path.dirname(path)
-    root = root.rstrip("/")
-    while cur.startswith(root + "/"):
+    while below(cur, root):
         if _skip_dir(cur):
             return True
         cur = os.path.dirname(cur)
@@ -146,8 +146,7 @@ def _light_for(path: str, root: str) -> bool:
     if db_cache.index_code:
         return False
     cur = os.path.dirname(path)
-    root = root.rstrip("/")
-    while cur.startswith(root + "/"):
+    while below(cur, root):
         if _names_only_dir(cur):
             return True
         cur = os.path.dirname(cur)
@@ -447,7 +446,7 @@ class Indexer:
         rs = roots()
         rows, gone, new_dirs = [], [], []
         for p in paths:
-            root = next((r for r in rs if p == r or p.startswith(r.rstrip("/") + "/")), None)
+            root = next((r for r in rs if inside(p, r)), None)
             if root is None or p == root:
                 continue
             rel_parts = Path(p).relative_to(root).parts
@@ -851,8 +850,8 @@ class Indexer:
 
         def keep(change: Change, path: str) -> bool:
             for r in rs:
-                if path.startswith(r.rstrip("/") + "/"):
-                    return not any(_skip_name(p) for p in Path(path).relative_to(r).parts)
+                if below(path, r):
+                    return not any(_skip_name(p) for p in Path(os.path.relpath(path, r)).parts)
             return False
 
         def run():

@@ -10,6 +10,8 @@ os.environ.setdefault("XDG_DATA_HOME", os.path.join(_tmp, "xdg"))
 
 import pytest  # noqa: E402
 
+pytestmark = pytest.mark.skipif(os.name == "nt", reason="the fake claude program is a shell script (claude -p is a Linux development path)")
+
 from raven_core import db  # noqa: E402
 from raven_core.router import cloud  # noqa: E402
 

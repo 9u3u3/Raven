@@ -78,7 +78,7 @@ def _arch() -> str:
 
 def managed_binary() -> Path | None:
     try:
-        p = Path(json.loads(MARKER.read_text())["binary"])
+        p = Path(json.loads(MARKER.read_text(encoding="utf-8"))["binary"])
         return p if p.is_file() else None
     except (OSError, ValueError, KeyError):
         return None
@@ -286,7 +286,7 @@ def _install() -> None:
         shutil.rmtree(final, ignore_errors=True)
         stage.rename(final)
         binary_path = final / exe.relative_to(stage)
-        MARKER.write_text(json.dumps({"version": rel["version"], "binary": str(binary_path), "at": int(time.time())}))
+        MARKER.write_text(json.dumps({"version": rel["version"], "binary": str(binary_path), "at": int(time.time())}), encoding="utf-8")
         # Old versions and the archives go: the models live in ~/.ollama and stay.
         for old in HOME.glob("ollama-*"):
             if old != final and old.is_dir():
