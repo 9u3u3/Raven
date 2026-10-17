@@ -18,6 +18,7 @@ from ..fs.kinds import kind_of
 from ..privacy import gate, review
 from . import cloud, local
 from . import providers as registry
+from ..platform import like_below
 
 HEAVY_TASKS = {"folder_summary"}
 # A folder summary is heavy (section 4.1) when the folder is large. "Think harder" makes any task heavy.
@@ -56,7 +57,7 @@ def build_folder_payload(path: str, red: gate.Redactor | None) -> tuple[str, int
     """Metadata lines and text samples for a folder. With a redactor, every part is redacted."""
     path = os.path.abspath(path)
     c = db.conn()
-    like = path.rstrip("/").replace("%", "\\%").replace("_", "\\_") + "/%"
+    like = like_below(path)
     rows = c.execute(
         "SELECT id, path, name, ext, size, mtime, category FROM files WHERE path LIKE ? ESCAPE '\\' AND is_dir=0 "
         "ORDER BY mtime DESC LIMIT 80",
@@ -125,7 +126,7 @@ def provider_order(task: str) -> list[str]:
 
 
 def _file_count(path: str) -> int:
-    like = os.path.abspath(path).rstrip("/").replace("%", "\\%").replace("_", "\\_") + "/%"
+    like = like_below(os.path.abspath(path))
     return db.conn().execute("SELECT COUNT(*) FROM files WHERE path LIKE ? ESCAPE '\\' AND is_dir=0", (like,)).fetchone()[0]
 
 

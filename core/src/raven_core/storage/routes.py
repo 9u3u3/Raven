@@ -111,8 +111,10 @@ def start_dupes(b: PathBody):
 def get_dupes(path: str | None = None, limit: int = 300):
     groups = dupe_job.groups
     if path:
-        root = os.path.abspath(path).rstrip("/") + "/"
-        groups = [g for g in groups if any(f["path"].startswith(root) for f in g["files"])]
+        from ..platform import below
+
+        root = os.path.abspath(path)
+        groups = [g for g in groups if any(below(f["path"], root) for f in g["files"])]
     return {**dupe_job.status(), "groups": groups[:limit]}
 
 

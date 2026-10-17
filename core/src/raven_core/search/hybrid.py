@@ -19,6 +19,7 @@ from ..fs.kinds import kind_of
 from ..index import embed
 from ..index.indexer import indexer
 from .filters import Filters, parse
+from ..platform import readlink
 
 RRF_K = 60
 TOP = 100
@@ -438,7 +439,7 @@ def _links(q: str, f, limit: int, t0: float) -> dict:
                 for n in dns + fns:
                     p = os.path.join(dp, n)
                     if os.path.islink(p):
-                        found.append({"path": p, "target": os.readlink(p)})
+                        found.append({"path": p, "target": readlink(p)})
                 if len(found) >= limit:
                     break
         for x in found:

@@ -178,6 +178,11 @@ from . import mcp_gate  # noqa: E402
 app.include_router(mcp_gate.router)
 # The renderer runs from file:// or the Vite dev server. The token is the guard, not the origin.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+if os.name == "nt":
+    from .platform import NativePaths
+
+    # Paths from the window use / (to_client): give them their native form before a route reads them.
+    app.add_middleware(NativePaths)
 
 
 def _authorized(request_token: str | None) -> bool:

@@ -25,6 +25,7 @@ from typing import Iterable
 
 from .. import db, events
 from .trash import move_to_trash, original_path, restore_from_trash
+from ..platform import like_below
 
 
 class OpError(Exception):
@@ -401,7 +402,7 @@ def _end_groups_at(paths: list[str]) -> None:
         for p in paths:
             for (gid,) in c.execute(
                 "SELECT DISTINCT group_id FROM operations WHERE undone=? AND (dst=? OR dst LIKE ? ESCAPE '\\')",
-                (LIVE, p, p.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "/%"),
+                (LIVE, p, like_below(p)),
             ):
                 dead.add(gid)
         for gid in dead:

@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from .. import db, events
-from ..platform import disk_bytes
+from ..platform import disk_bytes, like_below
 from ..fs import ops
 from ..fs.atime import keep_atime
 from . import protect
@@ -250,7 +250,7 @@ def trash_row() -> list[dict]:
 def _files(where: str, args: tuple, root: str | None) -> list:
     q = f"SELECT id, path, name, ext, size, mtime, atime FROM files WHERE is_dir=0 AND light=0 AND {where}"
     if root:
-        like = root.rstrip("/").replace("%", "\\%").replace("_", "\\_") + "/%"
+        like = like_below(root)
         q += " AND path LIKE ? ESCAPE '\\'"
         args = (*args, like)
     return db.conn().execute(q, args).fetchall()

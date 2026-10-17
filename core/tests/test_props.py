@@ -12,6 +12,7 @@ os.environ.setdefault("XDG_DATA_HOME", os.path.join(_tmp, "xdg"))
 import pytest  # noqa: E402
 
 from raven_core import db  # noqa: E402
+from raven_core import platform as plat  # noqa: E402
 from raven_core.fs import ops, props  # noqa: E402
 from raven_core.search.filters import parse  # noqa: E402
 
@@ -81,7 +82,7 @@ def test_links_and_broken(tmp_path):
     t.write_text("x")
     r = props.make_link(str(t))
     link = r["path"]
-    assert os.path.islink(link) and os.readlink(link) == str(t)
+    assert os.path.islink(link) and plat.readlink(link) == str(t)
     h = props.make_link(str(t), kind="hard")["path"]
     assert os.stat(h).st_ino == os.stat(t).st_ino and props.link_count(str(t)) == 2
     ops.undo()  # the hard link goes

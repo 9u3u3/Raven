@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from .. import db, events
 from ..fs.kinds import ext_of
 from . import protect
-from ..platform import below, disk_bytes, inside
+from ..platform import below, disk_bytes, inside, like_below
 
 log = logging.getLogger("raven.space")
 
@@ -479,7 +479,7 @@ def _persist(res: ScanResult) -> None:
 
 
 def _like(p: str) -> str:
-    return p.rstrip("/").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "/%"
+    return like_below(p)
 
 
 def dir_sizes(paths: list[str]) -> dict[str, int]:

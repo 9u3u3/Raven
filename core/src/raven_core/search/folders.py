@@ -29,7 +29,7 @@ from ..fs.kinds import kind_of
 from ..index import embed
 from .filters import parse
 from .hybrid import MIN_SIM, REL_SIM, RRF_K, _fts_query
-from ..platform import below, depth
+from ..platform import below, depth, like_below
 
 log = logging.getLogger("raven.folders")
 
@@ -689,7 +689,7 @@ def _entries(path: str, n: int = TOP_FILES) -> list[dict]:
 
 
 def _like(p: str) -> str:
-    return p.rstrip("/").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "/%"
+    return like_below(p)
 
 
 def _top_files(folder: str, text: str, vec: list[float] | None) -> list[dict]:

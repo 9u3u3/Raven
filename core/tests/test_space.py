@@ -44,7 +44,7 @@ def test_scan_totals_and_junk(tmp_path):
     res = scan.Scanner(str(tmp_path)).run()
     assert res.files == 7
     assert res.root.cats[scan.CODEDEPS] > 0 and res.root.cats[scan.PHOTOS] > 0
-    rules = {(j.rule, os.path.relpath(j.path, tmp_path)) for j in res.junk}
+    rules = {(j.rule, os.path.relpath(j.path, tmp_path).replace(os.sep, "/")) for j in res.junk}
     assert ("node_modules", "proj/node_modules") in rules
     assert ("temp", "Downloads/big.mp4.part") in rules
     assert ("empty", "empty") in rules
@@ -74,7 +74,7 @@ def test_duplicates_keep_choice(tmp_path):
     assert g["count"] == 3 and g["wasted"] == 18000
     keep = next(f for f in g["files"] if f["keep"])
     # The copy outside Downloads with the original name wins.
-    assert keep["path"].endswith("photos/a.jpg")
+    assert keep["path"].replace(os.sep, "/").endswith("photos/a.jpg")
 
 
 def test_protected_folders(tmp_path):
@@ -100,7 +100,7 @@ def test_protected_folders(tmp_path):
     job = dupes.DupeJob()
     job._run(str(tmp_path), 1024)
     paths = {f["path"] for g in job.groups for f in g["files"]}
-    assert len(job.groups) == 1 and all("/Documents/" in p for p in paths)
+    assert len(job.groups) == 1 and all(f"{os.sep}Documents{os.sep}" in p for p in paths)
 
     res = scan.Scanner(str(tmp_path)).run()
     assert not any(j.rule == "empty" for j in res.junk)
@@ -165,7 +165,7 @@ def test_near_duplicate_photos(tmp_path):
         _t.sleep(0.05)
     near = [g for g in job.groups if g.get("kind") == "near"]
     assert len(near) == 1
-    names = {f["path"].rsplit("/", 1)[1]: f for f in near[0]["files"]}
+    names = {os.path.basename(f["path"]): f for f in near[0]["files"]}
     assert set(names) == {"beach.jpg", "beach_small.jpg", "beach_edit.jpg"}
     assert not names["beach_small.jpg"]["keep"]
 

@@ -82,9 +82,9 @@ def test_the_route_forgets_what_raven_knows(home):
     assert r.json()["private"] == 1
     assert r.json()["forgot"]["files"] >= 3
     c = db.conn()
-    assert c.execute("SELECT COUNT(*) FROM files WHERE path LIKE ?", (f"{home}/Diary%",)).fetchone()[0] == 0
-    assert c.execute("SELECT COUNT(*) FROM activity WHERE path LIKE ?", (f"{home}/Diary%",)).fetchone()[0] == 0
-    assert c.execute("SELECT COUNT(*) FROM folder_visits WHERE path LIKE ?", (f"{home}/Diary%",)).fetchone()[0] == 0
+    assert c.execute("SELECT COUNT(*) FROM files WHERE path LIKE ?", (f"{home}{os.sep}Diary%",)).fetchone()[0] == 0
+    assert c.execute("SELECT COUNT(*) FROM activity WHERE path LIKE ?", (f"{home}{os.sep}Diary%",)).fetchone()[0] == 0
+    assert c.execute("SELECT COUNT(*) FROM folder_visits WHERE path LIKE ?", (f"{home}{os.sep}Diary%",)).fetchone()[0] == 0
     assert db.get_setting("galaxy") is None
     # The files stay as they are.
     assert Path(secret).read_text().startswith("# My diary")

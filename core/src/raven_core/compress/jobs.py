@@ -23,7 +23,7 @@ from ..fs import ops
 from ..fs.trash import move_to_trash
 from . import methods as m
 from .methods import ARCHIVE_METHODS, FILE_METHODS, LOSSY_METHODS, LOSSY_TOOLS, CompressError, Item
-from ..platform import inside
+from ..platform import below, depth, inside
 
 log = logging.getLogger("raven.compress")
 
@@ -198,7 +198,7 @@ def outputs_of(job: dict) -> list[str]:
 
 def _top_level(items: list[Item]) -> list[str]:
     rels = [i.rel for i in items]
-    return [r for r in rels if not any(r.startswith(o + "/") for o in rels if o != r)]
+    return [r for r in rels if not any(below(r, o) for o in rels if o != r)]
 
 
 def _group_live(group_id: str | None) -> bool:
@@ -311,7 +311,7 @@ def restore(job_id: int) -> dict:
                 ops.move_safe(os.path.join(tmp, top), dst)
                 # Times and permissions, deepest first, so folder times stay right.
                 base_rel = top
-                for it in sorted((i for i in items if i.rel == base_rel or i.rel.startswith(base_rel + "/")), key=lambda i: -i.rel.count("/")):
+                for it in sorted((i for i in items if inside(i.rel, base_rel)), key=lambda i: -depth(i.rel)):
                     m.apply_meta(os.path.join(dst, os.path.relpath(it.rel, base_rel)) if it.rel != base_rel else dst, it)
                 g.add("create", None, dst)
                 restored.append(dst)

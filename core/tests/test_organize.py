@@ -69,7 +69,7 @@ def test_suggest_apply_undo(tmp_path):
         _put(c, root, "wifi_password.txt", "Secret")
         _put(c, root, "movie.mp4.part", "Other")
     plan = organize.suggest(root)
-    dst = {os.path.basename(m.src): os.path.relpath(m.dst, root) for m in plan.moves}
+    dst = {os.path.basename(m.src): os.path.relpath(m.dst, root).replace(os.sep, "/") for m in plan.moves}
     assert dst == {"IMG_1.jpg": "Photos/IMG_1.jpg", "hw1.pdf": "Study/hw1.pdf", "Untitled.docx": "Money/Tax Invoice.docx"}
     assert {os.path.basename(s["path"]) for s in plan.skipped} == {"wifi_password.txt", "movie.mp4.part"}
     before = sorted(os.listdir(root))

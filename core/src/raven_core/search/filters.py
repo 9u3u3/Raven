@@ -13,6 +13,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from ..platform import like_escape
 
 TYPE_GROUPS = {
     "pdf": ["pdf"],
@@ -127,7 +128,7 @@ class Filters:
             conds.append(f"{alias}.is_hidden = 1")
         if self.folder:
             conds.append(f"{alias}.parent LIKE ? ESCAPE '\\'")
-            args.append("%" + self.folder.replace("%", "\\%").replace("_", "\\_") + "%")
+            args.append("%" + like_escape(self.folder) + "%")
         return (" AND ".join(conds) or "1"), args
 
     def match(self, row: dict) -> bool:

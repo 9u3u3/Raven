@@ -26,7 +26,7 @@ from datetime import datetime
 from . import db
 from .fs import ops
 from .fs.kinds import ext_of, kind_info
-from .platform import below
+from .platform import below, like_below
 
 log = logging.getLogger("raven.naming")
 
@@ -354,7 +354,7 @@ def scan(root: str | None = None, use_llm: bool = True, limit: int = 2000) -> di
             rows = c.execute("SELECT id, path, name, title, category, mtime FROM files WHERE path=?", (root,)).fetchall()
             force = True
         else:
-            like = root.rstrip("/").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "/%"
+            like = like_below(root)
             rows = c.execute(
                 "SELECT id, path, name, title, category, mtime FROM files WHERE is_dir=0 AND light=0 AND (parent=? OR path LIKE ? ESCAPE '\\')",
                 (root, like),

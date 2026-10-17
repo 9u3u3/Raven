@@ -66,7 +66,7 @@ def test_by_example_and_organize_prefs(tmp_path):
             self.src, self.dst, self.category, self.move = src, dst, cat, True
 
     root = str(tmp_path)
-    moves = [M(f"{root}/i.pdf", f"{root}/Money/i.pdf", "Invoice")]
+    moves = [M(os.path.join(root, "i.pdf"), os.path.join(root, "Money", "i.pdf"), "Invoice")]
     try:
         changed = learn.note_plan_edits(root, moves, [{"src": f"{root}/i.pdf", "dst": f"{root}/Money/Invoices/i.pdf"}])
         assert changed == {"Invoice": "Money/Invoices"} and learn.folder_prefs()["Invoice"] == "Money/Invoices"

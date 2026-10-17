@@ -33,6 +33,8 @@ MAX_STEPS = 20
 MAX_FILES = 2000
 FIND_DEPTH = 4
 SYSTEM_DIRS = ("/bin", "/boot", "/dev", "/etc", "/lib", "/lib64", "/proc", "/root", "/run", "/sbin", "/sys", "/usr", "/var", "/opt")
+if os.name == "nt":  # Windows: the system and the installed programs
+    SYSTEM_DIRS += tuple(v for v in (os.environ.get(k) for k in ("SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramData")) if v)
 ARCHIVE_EXTS = ("zip", "7z", "tar", "gz", "tgz", "zst", "xz", "bz2")
 
 
@@ -134,7 +136,7 @@ class Context:
         if user_protected(p) or is_private(p):
             return False  # a folder rule (PLAN2 P2-5), or a private folder (PLAN4 7.6)
         bases = [*index_roots(), self.cwd, *self.named, *[os.path.dirname(s) for s in self.selection]]
-        return any(p == b or p.startswith(b.rstrip("/") + "/") for b in bases if b)
+        return any(_within(p, b) for b in bases if b)
 
 
 def _within(p: str, base: str) -> bool:
@@ -214,7 +216,7 @@ def _below(base: str, name: str, depth: int = 3, budget: int = 2000) -> str | No
             except OSError:
                 continue
             for p in subs:
-                if p.lower().endswith("/" + name.lower()):
+                if path_key(p).lower().endswith("/" + path_key(name).lower()):
                     return p
             nxt += subs
             budget -= len(subs)
@@ -227,7 +229,7 @@ def _below(base: str, name: str, depth: int = 3, budget: int = 2000) -> str | No
 def _ci_join(base: str, rel: str) -> str | None:
     """Join `rel` to `base` and match each part without regard to case."""
     cur = base
-    for part in rel.split("/"):
+    for part in re.split(r"[\\/]", rel):
         if not part or part == ".":
             continue
         exact = os.path.join(cur, part)

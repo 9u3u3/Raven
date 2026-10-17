@@ -18,7 +18,7 @@ from pathlib import Path
 
 from .. import db
 from . import ops
-from ..platform import inside
+from ..platform import inside, readlink
 
 TAG_XATTR = "user.xdg.tags"
 MAX_ITEMS = 20_000  # a recursive change touches at most this many items
@@ -330,7 +330,7 @@ def broken_links(folder: str, recursive: bool = True, limit: int = 2000) -> list
         with it:
             for e in it:
                 if e.is_symlink():
-                    t = os.readlink(e.path)
+                    t = readlink(e.path)
                     full = t if os.path.isabs(t) else os.path.join(d, t)
                     if not os.path.exists(full):
                         out.append({"path": e.path, "target": t})

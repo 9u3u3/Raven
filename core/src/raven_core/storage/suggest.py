@@ -6,6 +6,7 @@ import os
 
 from .dupes import job as dupe_job
 from .scan import CATEGORIES, store
+from ..platform import like_below
 
 
 def _gb(n: int) -> str:
@@ -130,7 +131,7 @@ def insights(path: str) -> list[dict]:
             "id": f"name:{path}", "sentence": f"{n_generic} files have generic names",
             "bytes": 0, "total": 0, "reversible": True, "action": "name", "root": path, "items": [],
         })
-    like = path.rstrip("/").replace("%", "\\%").replace("_", "\\_") + "/%"
+    like = like_below(path)
     rows = db.conn().execute(
         "SELECT path, size, pii_level FROM files WHERE is_dir=0 AND pii_level>=2 AND path LIKE ? ESCAPE '\\' ORDER BY path",
         (like,),

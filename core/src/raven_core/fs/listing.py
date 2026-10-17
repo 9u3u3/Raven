@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import kinds
 from .kinds import ext_of, kind_info, mime_of
+from ..platform import readlink
 
 REAL_FS = {"ext2", "ext3", "ext4", "btrfs", "xfs", "vfat", "exfat", "ntfs", "ntfs3", "fuseblk", "f2fs", "zfs", "jfs", "reiserfs"}
 
@@ -136,7 +137,7 @@ def info(path: str) -> dict:
         group=group,
         mime="inode/directory" if e["is_dir"] else mime_of(e["name"]),
         inode=st.st_ino,
-        target=os.readlink(path) if e["is_link"] else None,
+        target=readlink(path) if e["is_link"] else None,
         acl=plat.acl_summary(path),
     )
     try:

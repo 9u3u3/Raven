@@ -26,7 +26,7 @@ from ..privacy import rules as pii_rules
 from . import embed
 from .chunk import chunk_section, header
 from .extract import can_extract, extract
-from ..platform import below, inside
+from ..platform import below, inside, like_below
 
 log = logging.getLogger("raven.index")
 
@@ -267,8 +267,7 @@ def _remove_paths(c, paths: list[str]) -> int:
 
 
 def _like_prefix(p: str) -> str:
-    esc = p.rstrip("/").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return esc + "/%"
+    return like_below(p)
 
 
 class Indexer:

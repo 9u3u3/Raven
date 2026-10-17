@@ -42,11 +42,27 @@ def depth(path: str) -> int:
     return path_key(path).count("/")
 
 
+def like_escape(s: str) -> str:
+    """Text for SQL LIKE ... ESCAPE '\\': "\\", "%" and "_" match only themselves."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def like_below(root: str) -> str:
+    """A LIKE pattern (ESCAPE '\\') for the paths below `root` in the index (native paths, os.sep)."""
+    return like_escape(root.rstrip("/\\") + os.sep) + "%"
+
+
 def subtree_range(root: str) -> tuple[str, str]:
     """(lo, hi) for a SQL range `path >= lo AND path < hi` over the paths below `root` in the index. The index
     keeps native paths, so the separator is os.sep."""
     r = root.rstrip("/\\")
     return r + os.sep, r + chr(ord(os.sep) + 1)
+
+
+def readlink(path: str) -> str:
+    """The target of a link, for people. Windows gives an absolute target as "\\\\?\\C:\\...": drop the "\\\\?\\"."""
+    t = os.readlink(path)
+    return t[4:] if IS_WIN and t.startswith("\\\\?\\") else t
 
 
 def disk_bytes(st: os.stat_result) -> int:
@@ -174,6 +190,68 @@ def to_client(value):
     if isinstance(value, dict):
         return {k: to_client(v) for k, v in value.items()}
     return value
+
+
+_CLIENT_PATH = re.compile(r"^(?:[A-Za-z]:/|//[^/])")
+
+
+def from_client(value):
+    """The reverse of to_client. Windows: a path from the window ("C:/x/y", "//host/share") gets its native
+    form ("C:\\x\\y"), so it matches the paths in the index. Other systems: unchanged."""
+    if not IS_WIN:
+        return value
+    if isinstance(value, str):
+        return value.replace("/", "\\") if _CLIENT_PATH.match(value) else value
+    if isinstance(value, list):
+        return [from_client(v) for v in value]
+    if isinstance(value, dict):
+        return {k: from_client(v) for k, v in value.items()}
+    return value
+
+
+class NativePaths:
+    """ASGI middleware for Windows: from_client() on each query value and each JSON request body."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        from urllib.parse import parse_qsl, urlencode
+
+        qs = scope.get("query_string", b"")
+        if qs:
+            pairs = parse_qsl(qs.decode("utf-8", "replace"), keep_blank_values=True)
+            scope = dict(scope, query_string=urlencode([(k, from_client(v)) for k, v in pairs]).encode())
+        headers = dict(scope.get("headers") or [])
+        if b"json" not in headers.get(b"content-type", b""):
+            return await self.app(scope, receive, send)
+        import json
+
+        body, more = b"", True
+        while more:
+            msg = await receive()
+            if msg["type"] != "http.request":
+                return await self.app(scope, receive, send)
+            body += msg.get("body", b"")
+            more = msg.get("more_body", False)
+        try:
+            body = json.dumps(from_client(json.loads(body))).encode()
+        except ValueError:
+            pass
+        scope = dict(scope, headers=[(k, v) for k, v in scope["headers"] if k != b"content-length"]
+                     + [(b"content-length", str(len(body)).encode())])
+        done = False
+
+        async def replay():
+            nonlocal done
+            if not done:
+                done = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            return await receive()
+
+        return await self.app(scope, replay, send)
 
 
 def soffice() -> str | None:
