@@ -17,6 +17,7 @@ from collections.abc import Iterator
 
 from ..privacy import gate
 from ..router import cloud, local
+from ..router import providers as registry
 from ..router import router as core
 from .retrieve import Source, content_words, retrieve, window
 
@@ -157,6 +158,8 @@ def _ask(question: str, think: bool, consent: bool, history: list[dict], local_o
     providers = core.provider_order("ask")
     want_cloud = think or bool(SYNTH.search(question))
     k, budget = (CLOUD_K, CLOUD_BUDGET) if want_cloud else (LOCAL_K, LOCAL_BUDGET)
+    if want_cloud and providers and mode != "local":
+        gate.layer2.warm_in_background()  # PLAN4 B7: the model loads while the search runs
     sources, info = retrieve(_retrieval_query(question, history), k=k, budget=budget)
     retrieve_ms = round((time.perf_counter() - t0) * 1000)
 
@@ -189,8 +192,12 @@ def _ask(question: str, think: bool, consent: bool, history: list[dict], local_o
     if tier == "T3":
         red = gate.Redactor()
         payload = build_prompt(question, sources, history, red)
-        blocked, why = gate.final_check(payload)
-        if blocked:
+        try:
+            payload = gate.seal(payload, red)
+            why = ""
+        except gate.Blocked as e:
+            why = str(e)
+        if why:
             tier, reason = "T2", f"the redaction gate blocked the request: {why}"
         elif mode == "ask" and not consent:
             yield _ev("sources", sources=[s.public() for s in sources], tier="T3", provider=providers[0], model=None,
@@ -208,7 +215,7 @@ def _ask(question: str, think: bool, consent: bool, history: list[dict], local_o
                 first_ms = None
                 sent_any = False
                 try:
-                    gen = cloud.STREAMS[prov](SYSTEM, payload)
+                    gen = registry.stream(prov, SYSTEM, payload)
                     model = next(gen)
                     for piece in gen:
                         out = rest.feed(piece)
@@ -243,7 +250,8 @@ def _ask(question: str, think: bool, consent: bool, history: list[dict], local_o
         from .. import lite
 
         if lite.enabled("llm"):
-            raise local.LocalError(local.unavailable_reason())
+            why = local.unavailable_reason()
+            raise local.LocalError(f"{why} The cloud did not answer: {reason}." if heavy and reason else why)
         # Lite mode (PLAN2 P2-6): no model writes an answer. Show the best passages, each with its citation.
         yield _ev("sources", sources=[s.public() for s in sources], tier="T1", provider="extract", model=None,
                   reason="lite mode: the best passages, no generated answer", retrieval=info)

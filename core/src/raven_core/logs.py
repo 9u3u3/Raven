@@ -148,7 +148,11 @@ def diagnostics(lines: int = 300) -> str:
             if k in _SKIP or k in keys.NAMES or k.endswith("_api_key"):
                 continue
             out.append(f"  {k} = {v[:120]}")
-        out.append(f"  keys stored: {', '.join(k for k in keys.NAMES if keys.get(k)) or 'none'}")
+        out.append(f"  keys stored: {', '.join(k for k in keys.names() if keys.get(k)) or 'none'}")
+        from .router import providers
+
+        rows = [f"{r['id']} ({'on' if r['on'] else 'off'}, {r['model'] or 'auto'})" for r in providers.rows()]
+        out.append(f"  cloud providers: {', '.join(rows) or 'none'}")
     except Exception as e:  # noqa: BLE001
         out.append(f"  error {e}")
     try:

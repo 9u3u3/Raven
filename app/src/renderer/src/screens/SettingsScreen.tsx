@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { get, post } from '../lib/api'
 import { size, tildify } from '../lib/format'
 import { FONTS, POLICY_NAMES, loadPolicies, refreshPrivacy, say, setPref, setPrivate, togglePolicy, useApp, type Font } from '../store'
-import KeyField from '../components/KeyField'
-import ClaudeAccount from '../components/ClaudeAccount'
+import AiProviders from '../components/AiProviders'
+import PrivacyWords from '../components/PrivacyWords'
 import FeaturePicker, { DeviceLine, useFeatures } from '../components/FeaturePicker'
 import OllamaSetup from '../components/OllamaSetup'
 import { Chip, Ghost, PageHeader, Seg, Switch, Track, stagger } from '../components/ui'
@@ -408,20 +408,66 @@ function IndexFile() {
 }
 
 /** Raven as an MCP server (section 13.12 item 1): off by default, with the config block to paste. */
+type McpClient = { id: string; name: string; found: boolean; added: boolean; current: boolean; path: string }
+
+/** MCP clients (PLAN4 R4): one button adds Raven to a client's config. Raven keeps the client's other servers and
+ * writes a copy of the file first (<name>.raven-backup). */
 function McpSection() {
   const [cfg, setCfg] = useState<{ enabled: boolean; config: unknown } | null>(null)
-  const load = (): void => void get<{ enabled: boolean; config: unknown }>('/mcp/config').then(setCfg).catch(() => {})
+  const [clients, setClients] = useState<McpClient[]>([])
+  const load = (): void => {
+    void get<{ enabled: boolean; config: unknown }>('/mcp/config').then(setCfg).catch(() => {})
+    void get<{ clients: McpClient[] }>('/mcp/clients').then((r) => setClients(r.clients)).catch(() => {})
+  }
   useEffect(load, [])
   if (!cfg) return null
   const text = JSON.stringify(cfg.config, null, 2)
+  const act = (c: McpClient, add: boolean): void => {
+    const run = (): void =>
+      void post<{ clients: McpClient[] }>(`/mcp/clients/${add ? 'add' : 'remove'}`, { id: c.id })
+        .then((r) => (setClients(r.clients), say(add ? `Added Raven to ${c.name}. Restart ${c.name} to use it.` : `Removed Raven from ${c.name}`)))
+        .catch((e) => say((e as Error).message, 'error'))
+    useApp.setState({
+      confirm: {
+        title: add ? `Add Raven to ${c.name}` : `Remove Raven from ${c.name}`,
+        body: add
+          ? `Raven adds its entry to ${c.path} and keeps the other entries. It saves a copy of the file first. ${c.name} can then search and read your indexed files through Raven, with redaction.`
+          : `Raven removes its entry from ${c.path}. The other entries stay.`,
+        action: add ? 'Add' : 'Remove',
+        danger: !add,
+        run
+      }
+    })
+  }
   return (
     <Section id="mcp" title="MCP clients" i={4}>
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-4 flex items-center gap-3">
         <Switch on={cfg.enabled} label="Let MCP clients use Raven" onChange={(v) => void post('/settings', { key: 'mcp_enabled', value: v }).then(load)} />
         <span className="font-medium">Let MCP clients use Raven</span>
         <Chip tone={cfg.enabled ? 'good' : 'plain'}>{cfg.enabled ? 'on' : 'off'}</Chip>
       </div>
-      <div className="mb-1 text-muted">Add to the client's MCP config:</div>
+      <div className="mb-5 max-w-[720px]">
+        {clients.map((c) => (
+          <div key={c.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line/70 py-2">
+            <span className="w-[130px] font-medium">{c.name}</span>
+            <Chip tone={c.added ? (c.current ? 'good' : 'warn') : 'plain'}>{c.added ? (c.current ? 'added' : 'added, old entry') : c.found ? 'found' : 'not found'}</Chip>
+            <span className="mono min-w-0 flex-1 truncate text-[11px] text-muted" title={c.path}>
+              {c.path}
+            </span>
+            {(!c.added || !c.current) && (
+              <Ghost disabled={!c.found && c.id === 'claude_code'} onClick={() => act(c, true)}>
+                {c.added ? 'Update' : 'Add'}
+              </Ghost>
+            )}
+            {c.added && (
+              <Ghost tone="plain" onClick={() => act(c, false)}>
+                Remove
+              </Ghost>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="mb-1 text-muted">Or add this block to the client's MCP config by hand:</div>
       <pre className="selectable max-w-[720px] overflow-x-auto rounded-lg bg-console-bg p-4 font-mono text-[11.5px] text-console-text">{text}</pre>
       <div className="mt-3">
         <Ghost onClick={() => void navigator.clipboard.writeText(text).then(() => say('Copied the MCP config'))}>Copy the config</Ghost>
@@ -438,25 +484,12 @@ export default function SettingsScreen() {
   const font = useApp((s) => s.font)
   const showHidden = useApp((s) => s.showHidden)
   const fullView = useApp((s) => s.fullView)
-  // Development builds only: claude -p and the latency overlay (PLAN4 R1).
-  const dev = useApp((s) => !!s.privacy?.dev)
   const [settings, setSettings] = useState<Record<string, unknown>>({})
   const [manual, setManual] = useState('')
-  const [groqModels, setGroqModels] = useState<string[]>([])
-  const loadGroqModels = async (): Promise<void> => {
-    try {
-      setGroqModels((await get<{ models: string[] }>('/privacy/groq-models')).models)
-    } catch {
-      setGroqModels([])
-    }
-  }
   const roots = index?.roots ?? []
 
   const reload = (): Promise<void> =>
-    get<Record<string, unknown>>('/settings').then((s) => {
-      setSettings(s)
-      if (s.groq_api_key) void loadGroqModels()
-    })
+    get<Record<string, unknown>>('/settings').then(setSettings)
   useEffect(() => {
     void reload()
   }, [])
@@ -484,7 +517,8 @@ export default function SettingsScreen() {
     ['folders', 'Indexed folders', FolderSearch],
     ['appearance', 'Appearance', Palette],
     ['features', 'Features and models', Cpu],
-    ['cloud', 'Cloud providers', Cloud],
+    ['cloud', 'AI providers', Cloud],
+    ['words', 'Words to hide', KeyRound],
     ['mcp', 'MCP clients', Plug],
     ['security', 'Encryption', Lock],
     ['performance', 'Performance', Cpu],
@@ -621,47 +655,22 @@ export default function SettingsScreen() {
 
           <FeaturesSection />
 
-          <Section id="cloud" i={4} title="Cloud providers">
-            <div className="grid grid-cols-[190px_1fr] items-center gap-x-4 gap-y-3.5">
-              <span className="text-muted">Preferred provider</span>
-              <select value={(settings.cloud_provider as string) || 'auto'} onChange={(e) => void setSetting('cloud_provider', e.target.value).then(refreshPrivacy)} className="field mono w-full max-w-[420px]">
-                <option value="auto">Automatic</option>
-                <option value="groq">Groq first, the others as fallback</option>
-                <option value="anthropic">Anthropic API first, the others as fallback</option>
-                {dev && <option value="claude">claude -p first (development build)</option>}
-              </select>
-              <KeyField provider="groq" setting="groq_api_key" label="Groq API key" placeholder="gsk_… (free at console.groq.com)" stored={settings.groq_api_key as string} onSaved={() => (void reload(), void loadGroqModels())} />
-              <span className="text-muted">Groq model</span>
-              <select value={(settings.groq_model as string) || ''} onChange={(e) => void setSetting('groq_model', e.target.value || null)} className="field mono w-full max-w-[420px]" disabled={!groqModels.length}>
-                <option value="">{groqModels.length ? 'Pick automatically' : 'Add a key to list models'}</option>
-                {groqModels.map((m) => (
-                  <option key={m}>{m}</option>
-                ))}
-              </select>
-              <KeyField provider="anthropic" setting="anthropic_api_key" label="Anthropic API key" placeholder="sk-ant-… (console.anthropic.com)" stored={settings.anthropic_api_key as string} onSaved={() => void reload()} />
-              <span className="text-muted">Where keys are stored</span>
-              <span className="text-[12px] text-muted">
-                {settings.key_store === 'keyring' ? 'System keyring' : 'The index on this computer. Start GNOME Keyring or KWallet to use a keyring.'}
-              </span>
-              <span className="text-muted">Anthropic model</span>
-              <select value={(settings.anthropic_model as string) || 'claude-sonnet-5-5'} onChange={(e) => void setSetting('anthropic_model', e.target.value)} className="field mono w-full max-w-[420px]">
-                {['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5'].map((m) => (
-                  <option key={m}>{m}</option>
-                ))}
-              </select>
-              {dev && (
-                <>
-                  <span className="text-muted">Claude account (dev)</span>
-                  <ClaudeAccount />
-                  <span className="text-muted">claude -p model (dev)</span>
-                  <select value={(settings.claude_model as string) || 'sonnet'} onChange={(e) => void setSetting('claude_model', e.target.value)} className="field mono w-full max-w-[420px]">
-                    {['sonnet', 'opus', 'haiku'].map((m) => (
-                      <option key={m}>{m}</option>
-                    ))}
-                  </select>
-                </>
-              )}
-            </div>
+          <Section
+            id="cloud"
+            i={4}
+            title="AI providers"
+            text="Heavy tasks and Think harder can use a cloud model, after redaction. Raven tries the providers in this order and uses the first one that works."
+          >
+            <AiProviders />
+          </Section>
+
+          <Section
+            id="words"
+            i={4}
+            title="Words to always hide"
+            text="Family names, a company, a client, a project code. Raven hides these words in every cloud request, in text and in file names. Case does not count."
+          >
+            <PrivacyWords />
           </Section>
 
           <McpSection />

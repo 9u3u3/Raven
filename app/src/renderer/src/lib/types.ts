@@ -200,16 +200,18 @@ export type AiMode = 'local' | 'hybrid' | 'ask'
 export type PrivacyStatus = {
   online?: boolean | null
   ai_mode: AiMode
-  providers: { groq: boolean; claude: boolean; anthropic?: boolean }
+  /** Provider id: ready to use (PLAN4 4). */
+  providers: Record<string, boolean>
+  provider_names?: Record<string, string>
   dev?: boolean
-  groq_model: string | null
-  claude_model: string
-  anthropic_model?: string
   claude_account?: string
-  cloud_provider: 'auto' | 'groq' | 'claude' | 'anthropic'
   local_model: string
   local_ready: boolean
   layer2: { available: boolean; error: string | null; load_ms: number | null }
+  /** Fail closed (PLAN4 7.5): why nothing goes to the cloud now, or null. */
+  cloud_blocked?: string | null
+  /** The number of custom words to always hide (PLAN4 7.4). */
+  words?: number
   today: { calls: number; bytes: number; pii_sent: number; mcp_calls?: number; mcp_bytes?: number }
 }
 

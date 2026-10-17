@@ -66,7 +66,9 @@ def test_key_goes_to_the_keyring_not_the_database(ring, monkeypatch):
     assert keys.put("groq_api_key", "gsk_test_1234") == "keyring"
     assert not _db_has("groq_api_key")
     assert list(ring.items.values()) == ["gsk_test_1234"]
-    assert cloud.groq_key() == "gsk_test_1234"
+    from raven_core.router import providers
+
+    assert providers.key("groq") == "gsk_test_1234"
     assert keys.store() == "keyring"
 
 
@@ -102,6 +104,8 @@ def test_settings_route_shows_a_hint_and_the_store(ring):
     out = TestClient(app_mod.app).get("/settings", headers=h).json()
     assert out["anthropic_api_key"] == "…5678"
     assert out["key_store"] == "keyring"
-    r = TestClient(app_mod.app).post("/settings", headers=h, json={"key": "groq_api_key", "value": " gsk_new "})
-    assert r.json()["store"] == "keyring"
+    c = TestClient(app_mod.app, headers=h)
+    c.post("/cloud/providers/add", json={"preset": "groq"})
+    r = c.post("/cloud/providers/update", json={"id": "groq", "key": " gsk_new "})
+    assert r.json()["key_store"] == "keyring"
     assert keys.get("groq_api_key") == "gsk_new"

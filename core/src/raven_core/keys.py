@@ -20,6 +20,13 @@ NAMES = ("groq_api_key", "anthropic_api_key")
 SERVICE = "raven"
 
 
+def names() -> list[str]:
+    """The key names in use: the old fixed names and one for each provider row (PLAN4 4)."""
+    from .router import providers
+
+    return sorted(set(NAMES) | {providers.key_name(r["id"]) for r in providers.rows()})
+
+
 def _account(name: str) -> str:
     # One entry for each data folder, as secure.py does: a test or demo data folder has its own keys.
     return f"{name}:" + hashlib.sha256(str(DATA_DIR).encode()).hexdigest()[:12]

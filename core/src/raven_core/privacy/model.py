@@ -31,6 +31,11 @@ LABEL_TO_TYPE = {
 }
 
 
+def threads() -> int:
+    """A quarter of the CPU cores, from 2 to 4."""
+    return max(2, min(4, (os.cpu_count() or 4) // 4))
+
+
 class PrivacyFilter:
     def __init__(self) -> None:
         self._sess = None
@@ -59,8 +64,9 @@ class PrivacyFilter:
             cfg = json.loads((MODEL_DIR / "config.json").read_text())
             self._labels = [cfg["id2label"][str(i)] for i in range(len(cfg["id2label"]))]
             opts = ort.SessionOptions()
-            # Few threads: the model must not starve the local LLM or the UI (it runs on the CPU).
-            opts.intra_op_num_threads = int(os.environ.get("RAVEN_PII_THREADS", "2"))
+            # Few threads: the model must not starve the local LLM or the UI (it runs on the CPU). PLAN4 B7: 4 threads
+            # are 1.7 times faster than 2 on a 16-core laptop, so a large CPU gets up to 4.
+            opts.intra_op_num_threads = int(os.environ.get("RAVEN_PII_THREADS") or threads())
             opts.inter_op_num_threads = 1
             opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
             self._sess = ort.InferenceSession(str(MODEL_DIR / "onnx" / "model_q4.onnx"), opts, providers=["CPUExecutionProvider"])
@@ -74,6 +80,21 @@ class PrivacyFilter:
             log.warning(self.error)
             self._sess = None
             return False
+
+    def warm(self) -> None:
+        """Load the model now, so the next cloud call does not wait for it (PLAN4 B7: a load takes about 0.8 s)."""
+        if self._sess is not None or not self.available():
+            return
+        with self._lock:
+            if self._load():
+                from ..memory import unload_when_idle
+
+                self._used = time.monotonic()
+                unload_when_idle(self, "privacy filter", ("_sess", "_tok"))
+
+    def warm_in_background(self) -> None:
+        if self._sess is None and self.available():
+            threading.Thread(target=self.warm, name="privacy-warm", daemon=True).start()
 
     def detect(self, text: str) -> list[Span]:
         if not text.strip():

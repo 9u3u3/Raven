@@ -7,9 +7,12 @@ Steps for every cloud payload:
  4. Layer 2 runs on text that has no cached spans.
  5. Each entity becomes a typed placeholder: [PERSON_1], [ACCOUNT_1]. The map stays in memory.
  6. Final check: layer 1 scans the redacted payload. A high-risk entity left means block.
+    seal() runs the check and gives a Sealed payload. A provider adapter takes only a Sealed payload (PLAN4 4).
  7. The payload goes to the ledger.
  8. The router sends it.
  9. restore() puts the original values back into the answer, locally.
+
+Fail closed (PLAN4 7.5): without a working Privacy Filter, seal() refuses, and the local model answers.
 """
 
 from __future__ import annotations
@@ -21,10 +24,47 @@ from dataclasses import dataclass, field
 
 from .. import db, events
 from .model import model as layer2
-from .rules import HIGH_RISK, Span, detect, resolve
+from .rules import HIGH_RISK, Span, custom_spans, detect, resolve
 
 PLACEHOLDER = re.compile(r"\[([A-Z]+)_(\d+)\]")
 NAME_TYPES = {"PERSON", "EMAIL", "PHONE", "ADDRESS", "SECRET"}
+NOT_READY = "The Privacy Filter is not ready, so nothing goes to the cloud. Use the local model, or wait."
+NOT_INSTALLED = ("The Privacy Filter is not installed, so nothing goes to the cloud. "
+                 "Add it in Settings, Features and models, or use the local model.")
+
+
+class Blocked(Exception):
+    """The gate refuses a payload. The message says why, with no original value in it."""
+
+
+class Sealed(str):
+    """A cloud payload that passed seal(). Only seal() makes one. A string operation on it gives a plain str,
+    so a caller cannot add text after the check."""
+
+
+_words = {"at": 0.0, "words": []}
+
+
+def custom_words() -> list[str]:
+    """The user's own words to always redact (PLAN4 7.4), cached for 5 s."""
+    now = time.monotonic()
+    if now - _words["at"] > 5:
+        raw = db.get_setting("privacy_words") or []
+        _words.update(at=now, words=[w.strip() for w in raw if isinstance(w, str) and len(w.strip()) >= 2])
+    return _words["words"]
+
+
+def forget_words_cache() -> None:
+    _words["at"] = 0.0
+
+
+def layer2_ready() -> str | None:
+    """None when the Privacy Filter can run, else the reason it cannot."""
+    if not layer2.available():
+        return NOT_INSTALLED
+    if layer2.error:
+        return NOT_READY
+    return None
 
 
 @dataclass
@@ -69,6 +109,7 @@ class Redactor:
         or account numbers, so for names it keeps only people, contacts and addresses."""
         spans = list(cached or [])
         spans += detect(text)
+        spans += custom_spans(text, custom_words())
         if self.use_layer2 and not cached_layer2:
             if layer2.available():
                 if name:
@@ -94,20 +135,73 @@ class Redactor:
         out.append(text[last:])
         return "".join(out)
 
+    def redact_names(self, names: list[str]) -> list[str]:
+        """Redact many file or folder names with one layer-2 call (PLAN4 B7: one call per name took 690 ms for
+        80 names). Each name stands on its own line. The result is the same as redact(name, name=True)."""
+        if not names:
+            return []
+        found: list[Span] = []
+        l2 = self.use_layer2 and layer2.available()
+        if self.use_layer2 and not l2:
+            self.layer2_state = "missing"
+        if l2:
+            # The same title-case copy as in redact(). A name whose copy has another length stays as it is.
+            prep = []
+            for n in names:
+                t = re.sub(r"[_\-.\n]", " ", n).title()
+                prep.append(t if len(t) == len(n) else re.sub(r"\n", " ", n))
+            found = [s for s in layer2.detect("\n".join(prep)) if s.type in NAME_TYPES and s.end - s.start >= 3]
+            self.layer2_state = "on" if layer2.error is None else "error"
+        out, off = [], 0
+        for n in names:
+            end = off + len(n)
+            mine = [Span(s.type, s.start - off, s.end - off, s.score, s.layer) for s in found if s.start >= off and s.end <= end]
+            out.append(self.redact(n, mine, cached_layer2=l2, name=True))
+            off = end + 1
+        return out
+
 
 # Binary data in a payload: a data URL, or a long base64 run (a photo, a video frame, a file). PLAN4 7.6: no
 # photo, video or audio goes to a cloud AI, so the gate blocks these even when a caller forgets the rule.
 BINARY = re.compile(r"data:[\w.+-]+/[\w.+-]+;base64,|[A-Za-z0-9+/]{512,}={0,2}")
 
 
+def _place(text: str, s: Span) -> str:
+    """Where a blocked item is: the words around it, with the item itself hidden."""
+    before = text[max(0, s.start - 30):s.start].split("\n")[-1]
+    after = text[s.end:s.end + 30].split("\n")[0]
+    return f"“…{before}[hidden {s.type}]{after}…”"
+
+
 def final_check(text: str) -> tuple[bool, str]:
-    """Step 6: scan the redacted payload again. Block on binary data and on any high-risk entity."""
+    """Step 6: scan the redacted payload again. Block on binary data and on any high-risk entity. The reason
+    names each type and its place, so the user sees why (PLAN4 7.5)."""
     if BINARY.search(text):
         return True, "the payload holds binary data (a photo, a video or a file)"
-    left = [s for s in detect(PLACEHOLDER.sub("", text)) if s.type in HIGH_RISK]
+    bare = PLACEHOLDER.sub("", text)
+    left = [s for s in detect(bare) + custom_spans(bare, custom_words()) if s.type in HIGH_RISK]
     if left:
-        return True, f"{len(left)} high-risk item{'s' if len(left) != 1 else ''} ({', '.join(sorted({s.type for s in left}))}) left after redaction"
+        places = "; ".join(_place(bare, s) for s in left[:3])
+        return True, (f"{len(left)} high-risk item{'s' if len(left) != 1 else ''} ({', '.join(sorted({s.type for s in left}))}) "
+                      f"left after redaction, near {places}")
     return False, ""
+
+
+def seal(payload: str, red: Redactor | None) -> Sealed:
+    """Step 6 for a cloud payload. Raise Blocked when the Privacy Filter cannot run (fail closed) or when the
+    final check finds binary data or a high-risk item. A provider adapter takes only the result."""
+    if red is None:
+        raise Blocked("the payload did not go through the redaction gate")
+    if red.use_layer2:
+        why = layer2_ready()
+        if why is None and red.layer2_state in ("missing", "error"):
+            why = NOT_READY
+        if why:
+            raise Blocked(why)
+    blocked, why = final_check(payload)
+    if blocked:
+        raise Blocked(why)
+    return Sealed(payload)
 
 
 def redact_text(text: str, use_layer2: bool = True) -> Redaction:

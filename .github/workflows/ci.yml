@@ -42,6 +42,12 @@ jobs:
           uv sync --dev --frozen
           uv run pytest -q
 
+      # PLAN4 7.3: recall of the pattern layer on the synthetic set. A high-risk type below 0.99 fails the run.
+      - name: PII recall (patterns)
+        if: runner.os == 'Linux'
+        working-directory: core
+        run: uv run python scripts/pii_recall.py --no-layer2 --check
+
   audit:
     runs-on: ubuntu-22.04
     steps:

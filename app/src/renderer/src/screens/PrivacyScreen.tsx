@@ -4,7 +4,7 @@ import { EmptyState } from '../components/EmptyState'
 import { del, get, on, post } from '../lib/api'
 import { dateTime, size, tildify } from '../lib/format'
 import type { AiMode, LedgerRow, PrivacyStatus } from '../lib/types'
-import { refreshPrivacy, reveal, say, setAiMode, useApp } from '../store'
+import { providerName, refreshPrivacy, reveal, say, setAiMode, useApp } from '../store'
 import { Ghost, Seg, Switch, stagger, useCountUp } from '../components/ui'
 
 // The Privacy screen: one moving picture of what may leave, one switch, three numbers, and the details in tabs.
@@ -68,11 +68,12 @@ function Stat({ value, label, fmt }: { value: number; label: string; fmt?: (n: n
 
 /** What works now: one row per part. A problem shows its fix, because that is the one thing to act on. */
 function Ready({ p }: { p: PrivacyStatus }) {
-  const cloud = p.providers.claude || p.providers.groq || !!p.providers.anthropic
+  const ready = Object.entries(p.providers).filter(([, on]) => on).map(([id]) => p.provider_names?.[id] ?? id)
+  const cloud = ready.length > 0
   const rows: [boolean, string, string][] = [
     [p.local_ready, 'Local model', p.local_ready ? p.local_model : `run: ollama pull ${p.local_model}`],
-    [!p.layer2.error && p.layer2.available, 'Privacy Filter', p.layer2.error ?? (p.layer2.available ? 'PII layer 2 on the CPU' : 'not downloaded: patterns only')],
-    [cloud, 'Cloud model', cloud ? [p.providers.claude && 'claude -p', p.providers.groq && 'Groq', p.providers.anthropic && 'Anthropic'].filter(Boolean).join(', ') : 'none: add a key in Settings']
+    [!p.layer2.error && p.layer2.available, 'Privacy Filter', p.layer2.error ?? (p.layer2.available ? 'PII layer 2 on the CPU' : 'not installed: nothing goes to the cloud')],
+    [cloud, 'Cloud model', cloud ? ready.join(', ') : 'none: add a provider in Settings, AI providers']
   ]
   return (
     <div className="divide-y divide-line">
@@ -84,6 +85,11 @@ function Ready({ p }: { p: PrivacyStatus }) {
         </div>
       ))}
       {p.online === false && <div className="py-2 text-[12px] text-accent">Offline: Raven answers on this computer only.</div>}
+      {/* PLAN4 7.1 and 7.6: what never leaves, and what the model downloads send. */}
+      <div className="py-2 text-[12px] text-muted">
+        Photos, videos and audio never go to the cloud, and no AI reads a private folder. Model downloads come from Hugging Face and Ollama and send no file data.
+        {p.words ? ` ${p.words} custom word${p.words === 1 ? '' : 's'} always hidden.` : ''}
+      </div>
     </div>
   )
 }
@@ -112,7 +118,7 @@ function Ledger({ rows }: { rows: LedgerRow[] }) {
           <button className="group grid w-full grid-cols-[140px_minmax(0,1fr)_80px_110px] items-baseline gap-4 py-2.5 text-left transition-colors hover:bg-hover" onClick={() => setOpen(open === r.id ? null : r.id)}>
             <span className="mono text-[11.5px] text-muted">{dateTime(r.ts)}</span>
             <span className="truncate transition-transform duration-200 group-hover:translate-x-1">
-              {r.feature} <span className="text-muted">· {r.provider}</span>
+              {r.feature} <span className="text-muted">· {providerName(r.provider)}</span>
             </span>
             <span className="mono text-right text-[12px]">{size(r.bytes)}</span>
             <span className={`text-right text-[12px] ${r.pii_count ? 'text-ok' : 'text-muted'}`}>{r.pii_count} hidden</span>

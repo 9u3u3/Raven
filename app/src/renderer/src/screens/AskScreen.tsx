@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
+import Payload from '../components/Payload'
 import { EmptyState } from '../components/EmptyState'
 import { FileIcon } from '../components/FileIcon'
 import { Chip, Ghost, SectionTitle, stagger } from '../components/ui'
 import { clock, size, tildify } from '../lib/format'
 import type { AskSection, AskSource } from '../lib/types'
-import { ask, reveal, setScreen, useApp } from '../store'
+import { ask, providerName, reveal, setScreen, useApp } from '../store'
 
 // An answer is a page, not a chat: the question is the headline, the answer is text with
 // numbered citations, and the sources are footnotes that open the file at the right place.
@@ -48,7 +49,8 @@ function TierLine({ a }: { a: AskSection }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-[12px] text-muted">
       <Chip tone={cloud ? 'warn' : 'good'}>{cloud ? 'cloud' : 'local'}</Chip>
-      {(cloud ? [a.provider, a.model] : [a.model]).filter(Boolean).map((x) => (
+      {/* A cloud model label is "Provider · model" (PLAN4 4). */}
+      {(cloud ? [a.model ?? providerName(a.provider)] : [a.model]).filter(Boolean).map((x) => (
         <span key={x}>{x}</span>
       ))}
       {cloud && <span className="text-ok">redacted {a.redacted ?? 0} items</span>}
@@ -63,7 +65,7 @@ function Progress({ a, now }: { a: AskSection; now: number }) {
   const phase = a.status === 'retrieving' ? 0 : a.text ? 2 : 1
   const steps = [
     'Reading your files',
-    a.tier === 'T3' ? `Asking ${a.provider ?? 'the cloud'} with ${a.sources.length} redacted sources` : a.sources.length ? `Reading ${a.sources.length} passages` : 'Choosing the best passages',
+    a.tier === 'T3' ? `Asking ${providerName(a.provider) || 'the cloud'} with ${a.sources.length} redacted sources` : a.sources.length ? `Reading ${a.sources.length} passages` : 'Choosing the best passages',
     'Writing the answer'
   ]
   return (
@@ -144,11 +146,9 @@ function Section({ a }: { a: AskSection }) {
         <div className="anim-pop mb-6 border-l-2 border-accent pl-5">
           <div className="serif mb-2 text-[16px] leading-none">Your approval is needed</div>
           <p className="mb-2 text-muted">
-            Send to <b className="text-text">{a.consent.provider}</b> · {a.consent.redacted} items redacted
+            Send to <b className="text-text">{providerName(a.consent.provider)}</b> · {a.consent.redacted} items redacted
           </p>
-          <pre className="selectable mb-4 max-h-[46vh] overflow-auto whitespace-pre-wrap bg-console-bg p-4 font-mono text-[11.5px] text-console-text" style={{ borderRadius: 3 }}>
-            {a.consent.payload}
-          </pre>
+          <Payload text={a.consent.payload} className="mb-4 max-h-[46vh] overflow-auto rounded-[3px] bg-console-bg p-4 font-mono text-[11.5px] text-console-text" />
           <div className="flex items-center gap-7">
             <button className="btn-primary" onClick={() => void ask(a.question, { think: a.think, consent: true, replace: a.id, followUp: true })}>
               Send ({size(new Blob([a.consent.payload]).size)})

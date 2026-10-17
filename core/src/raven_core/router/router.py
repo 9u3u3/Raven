@@ -17,12 +17,11 @@ from .. import db
 from ..fs.kinds import kind_of
 from ..privacy import gate
 from . import cloud, local
+from . import providers as registry
 
 HEAVY_TASKS = {"folder_summary"}
 # A folder summary is heavy (section 4.1) when the folder is large. "Think harder" makes any task heavy.
 HEAVY_FOLDER_FILES = 40
-PREFERENCE = {"folder_summary": ["claude", "anthropic", "groq"], "ask": ["groq", "anthropic", "claude"]}
-
 SUMMARY_SCHEMA = {
     "type": "object",
     "properties": {
@@ -78,11 +77,12 @@ def build_folder_payload(path: str, red: gate.Redactor | None) -> tuple[str, int
                              "size": st.st_size, "mtime": int(st.st_mtime), "category": None})
             if len(rows) >= 80:
                 break
+    # Relative paths: never the full path with the user name (section 10.2). One layer-2 call for all names.
+    rels = [os.path.relpath(r["path"], path) for r in rows] + [os.path.basename(path)]
+    safe = dict(zip(rels, red.redact_names(rels))) if red else {x: x for x in rels}
     lines = []
     for r in rows:
-        rel = os.path.relpath(r["path"], path)  # never the full path with the user name (section 10.2)
-        if red:
-            rel = red.redact(rel, name=True)
+        rel = safe[os.path.relpath(r["path"], path)]
         month = time.strftime("%Y-%m", time.localtime(r["mtime"] or 0))
         lines.append(f"- {rel} | {kind_of(r['name'], False)} | {_human(r['size'])} | modified {month}")
     samples = []
@@ -100,13 +100,9 @@ def build_folder_payload(path: str, red: gate.Redactor | None) -> tuple[str, int
         if red:
             spans, l2_done = gate.cached_spans(ch["id"])
             text = red.redact(text, [s for s in spans if s.end <= len(text)], cached_layer2=l2_done)
-        rel = os.path.relpath(r["path"], path)
-        if red:
-            rel = red.redact(rel, name=True)
+        rel = safe[os.path.relpath(r["path"], path)]
         samples.append(f"### {rel}\n{' '.join(text.split())}")
-    name = os.path.basename(path)
-    if red:
-        name = red.redact(name, name=True)
+    name = safe[os.path.basename(path)]
     payload = (
         f"Folder: {name}\nFiles ({len(lines)} shown, newest first):\n" + "\n".join(lines)
         + "\n\nText samples (the start of some files):\n" + "\n\n".join(samples)
@@ -116,17 +112,14 @@ def build_folder_payload(path: str, red: gate.Redactor | None) -> tuple[str, int
 
 
 def provider_order(task: str) -> list[str]:
-    """Configured cloud providers for a task, best first."""
-    order = list(PREFERENCE[task])
-    chosen = db.get_setting("cloud_provider") or "auto"
-    if chosen in order:
-        # The chosen provider goes first. The other one stays as the fallback (section 4.3).
-        order.remove(chosen)
-        order.insert(0, chosen)
+    """The cloud providers that can run, in the user's order (PLAN4 4). The first one that works answers.
+    `task` stays for the callers. The order is the same for every task."""
+    _ = task
     # Local only makes no outbound connection, not even the online check.
     if ai_mode() == "local":
         return []
-    return [p for p in order if cloud.configured().get(p)] if cloud.online() else []
+    ids = registry.order()
+    return ids if ids and cloud.online() else []
 
 
 def _file_count(path: str) -> int:
@@ -169,10 +162,15 @@ def _run(task: str, path: str, think_harder: bool = False, consent: bool = False
         tier, reason = "T2", "no cloud provider is set up" if cloud.online() else "this computer is offline, so the local model answers"
 
     if tier == "T3":
+        gate.layer2.warm()  # PLAN4 B7: load the model before the many short name checks
         red = gate.Redactor()
         payload, n = build_folder_payload(path, red)
-        blocked, why = gate.final_check(payload)
-        if blocked:
+        try:
+            payload = gate.seal(payload, red)
+            why = ""
+        except gate.Blocked as e:
+            why = str(e)
+        if why:
             tier, reason = "T2", f"the redaction gate blocked the request: {why}"
         elif mode == "ask" and not consent:
             # Ask each time: show the exact redacted payload before anything leaves.
@@ -183,7 +181,7 @@ def _run(task: str, path: str, think_harder: bool = False, consent: bool = False
             for prov in providers:
                 lid = gate.ledger_write(task, "T3", prov, payload, len(red.mapping))
                 try:
-                    data, model = cloud.PROVIDERS[prov](SUMMARY_SYSTEM, payload, SUMMARY_SCHEMA)
+                    data, model = registry.chat(prov, SUMMARY_SYSTEM, payload, SUMMARY_SCHEMA)
                 except cloud.CloudError as e:
                     errors.append(f"{prov}: {e}")
                     with db.tx() as c:
@@ -201,7 +199,9 @@ def _run(task: str, path: str, think_harder: bool = False, consent: bool = False
 
     # T2: the local model sees the real payload. Nothing leaves the machine, so nothing goes to the ledger.
     if not local.available():
-        raise local.LocalError(local.unavailable_reason())
+        # Say why the cloud did not answer too (a block, fail closed), not only why the local model cannot.
+        why = local.unavailable_reason()
+        raise local.LocalError(f"{why} The cloud did not answer: {reason}." if heavy and reason else why)
     payload, n = build_folder_payload(path, None)
     data = local.chat(SUMMARY_SYSTEM, payload, SUMMARY_SCHEMA)
     return {

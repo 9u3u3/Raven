@@ -13,6 +13,7 @@ import re
 
 from ..privacy import gate
 from ..router import cloud, local
+from ..router import providers as registry
 from ..router import router as core
 
 OPS = ["find", "selection", "convert", "move", "copy", "rename", "mkdir", "trash", "compress", "extract"]
@@ -63,19 +64,20 @@ Placeholders such as [PERSON_1] stand for private names. Copy them exactly."""
 
 
 def _context(cwd: str, selection: list[str], red: gate.Redactor | None) -> str:
-    def r(x: str) -> str:
-        return red.redact(x, name=True) if red else x
-    lines = [f"Folder in view: {r(os.path.basename(cwd) or cwd)}"]
     try:
         from ..privacy.scope import is_private
 
         subs = sorted(d.name for d in os.scandir(cwd) if d.is_dir() and not d.name.startswith(".") and not is_private(d.path))[:40]
     except OSError:
         subs = []
+    sel = [os.path.basename(s) for s in selection[:20]]
+    names = [os.path.basename(cwd) or cwd, *subs, *sel]
+    safe = red.redact_names(names) if red else names  # one layer-2 call for all names (PLAN4 B7)
+    lines = [f"Folder in view: {safe[0]}"]
     if subs:
-        lines.append("Folders in it: " + ", ".join(r(s) for s in subs))
-    if selection:
-        lines.append("Selected: " + ", ".join(r(os.path.basename(s)) for s in selection[:20]))
+        lines.append("Folders in it: " + ", ".join(safe[1:1 + len(subs)]))
+    if sel:
+        lines.append("Selected: " + ", ".join(safe[1 + len(subs):]))
     return "\n".join(lines)
 
 
@@ -107,14 +109,15 @@ def plan_cloud(command: str, cwd: str, selection: list[str], providers: list[str
         raise cloud.CloudError("a folder rule keeps this folder off the cloud")
     red = gate.Redactor()
     payload = _context(cwd, selection, red) + f"\nCommand: {red.redact(command)}"
-    blocked, why = gate.final_check(payload)
-    if blocked:
-        raise cloud.CloudError(f"the redaction gate blocked the request: {why}")
+    try:
+        payload = gate.seal(payload, red)
+    except gate.Blocked as e:
+        raise cloud.CloudError(f"the redaction gate blocked the request: {e}") from e
     errors = []
     for prov in providers:
         lid = gate.ledger_write("agent plan", "T3", prov, SYSTEM + "\n\n" + payload, len(red.mapping))
         try:
-            data, _model = cloud.PROVIDERS[prov](SYSTEM, payload, PLAN_SCHEMA)
+            data, _model = registry.chat(prov, SYSTEM, payload, PLAN_SCHEMA)
         except cloud.CloudError as e:
             gate.ledger_mark_failed(lid, "agent plan")
             errors.append(f"{prov}: {e}")

@@ -85,10 +85,17 @@ See [Run it (development)](#run-it-development) for the optional tools and the t
 **Privacy**
 - AI modes: Local only, Hybrid, Ask each time. Offline, the mode line says `LOCAL ONLY (offline)`.
 - Two PII layers (patterns with checksums, and the OpenAI Privacy Filter), a redaction gate, and a ledger of every
-  byte that leaves the laptop.
+  byte that leaves the laptop. The patterns cover India's IDs (Aadhaar, VID, PAN, GSTIN, passport, voter ID, driving
+  licence, UAN, ABHA, ration card) and the types that apply everywhere (cards with CVV and expiry, IBAN, crypto
+  wallets, health records, secrets, OTPs). A column header in a table also marks the values below it.
+- Fail closed: without the Privacy Filter, nothing goes to the cloud. Photos, videos and audio never go to the cloud.
+- Words to always hide: family names, a company, a client. Private folders: no AI and no model reads them.
+- Cloud providers: Anthropic, OpenAI, Groq, OpenRouter, Google Gemini, or any OpenAI-compatible server. Groq,
+  Gemini and OpenRouter have free plans. Raven tries them in your order.
 - Encrypted index (SQLCipher) with a passphrase, or with the system keyring.
 - Raven as an MCP server: Claude Desktop, Cursor or Zed can search, read and ask your files through the same gate.
-  The tools only read. MCP is off until you turn it on.
+  The tools only read. MCP is off until you turn it on. Settings, MCP clients adds Raven to Claude Desktop, Cursor,
+  Windsurf, VS Code or Claude Code with one button.
 
 - Habits (local only, one switch, one delete): files you open often rank higher, Continue shows the files you
   probably want now, the Inspector says where a file usually goes, new names follow your naming style, and a
@@ -129,7 +136,8 @@ plan expects.
 | Full hybrid search with the reranker | 106 ms | 500 ms |
 | Folder search | 65 ms | 300 ms |
 | Search by appearance (SigLIP 2, CPU) | 25 ms | 300 ms |
-| Redaction of new text (both layers, CPU) | 106 ms | 50 ms (the budget is for cached spans) |
+| Redaction of new text (both layers, CPU, model loaded) | 53 ms | 50 ms (the budget is for cached spans) |
+| Redaction, first call after the model unloads | 0.8 s | the model loads while Ask searches |
 | Ask, first word (local qwen3:4b) | 2.5 s | 1 s, missed: the GPU state above |
 
 | Quality | Result |
@@ -168,7 +176,7 @@ flowchart TB
   end
   DB[("SQLite or SQLCipher<br/>files, chunks, FTS5, sqlite-vec,<br/>journal, ledger")]
   OL["Ollama on the GPU<br/>embeddinggemma, qwen3:4b"]
-  CL["Cloud, redacted only<br/>Groq, Anthropic API, claude -p"]
+  CL["Cloud, redacted only<br/>Anthropic, OpenAI, Groq, OpenRouter, Gemini"]
   EXT["MCP clients<br/>Claude Desktop, Cursor, Zed"]
   R <-->|HTTP + WebSocket| Core
   M --- Core
@@ -195,10 +203,10 @@ flowchart TB
 5. Choose the folders to index. Desktop, Documents, Downloads and Pictures are suggested. Home holds everything and
    takes long on a large disk.
 6. Choose the AI mode: Local only, Hybrid or Ask each time.
-7. Optional: paste a cloud key and click **Save and test**. A **Groq** key (free at console.groq.com) or an
-   **Anthropic** key (console.anthropic.com). If Claude Code is installed, Raven can use `claude -p` with no key. The
-   test sends no file data. Keys stay on this computer, and the app never shows a stored key again (only `…` and the
-   last 4 characters). You can change the keys later in Settings, Cloud providers.
+7. Optional: add a cloud provider and paste its key. **Groq**, **Google Gemini** and **OpenRouter** have free plans.
+   **Anthropic** and **OpenAI** need a paid key. The test sends no file data. Keys stay on this computer, and the
+   app never shows a stored key again (only `…` and the last 4 characters). You can change the providers and their
+   order later in Settings, AI providers. A development build can also use `claude -p` with no key.
 8. Click **Start**. The "Getting ready" view follows the downloads and the index. Click **Open Raven** at any time.
 
 ## Run it (development)
@@ -305,6 +313,11 @@ The sidecar keeps its database, caches and models in `~/.local/share/raven` (Win
 - Administrator retries need a polkit agent (for example `hyprpolkitagent` on Hyprland). Raven says so when none runs.
 - "Remember on this computer" for the encrypted index needs a system keyring. Without one, Raven asks for the
   passphrase at each start.
+- The redaction patterns cover India and the types that apply in all countries. Other countries come later.
+  The recall numbers come from a synthetic set, so real recall on addresses is probably lower.
+- Nobody has tested the provider adapters against the real Anthropic, OpenAI, Groq, OpenRouter or Gemini APIs
+  yet. The tests use fake servers.
+- The MCP client buttons are tested on Linux only.
 
 ## License
 

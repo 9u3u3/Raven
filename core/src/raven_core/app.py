@@ -1610,10 +1610,11 @@ class ProviderBody(BaseModel):
 
 @app.post("/cloud/test")
 async def cloud_test(b: ProviderBody):
-    """Check a stored cloud key with one small request that sends no file data."""
-    from .router import cloud
+    """Check a provider with its model list. It sends no file data and makes no model call."""
 
-    return await run_in_threadpool(cloud.test_key, b.provider)
+    from .router import providers
+
+    return await run_in_threadpool(providers.test, b.provider)
 
 
 @app.get("/cloud/claude-accounts")
@@ -1634,7 +1635,7 @@ def get_settings():
     out = {r[0]: json.loads(r[1]) for r in rows if r[0] not in ("ui_tabs", "galaxy")}
     # The renderer never gets a stored API key back, only a hint that one is set. The keys can live in the
     # system keyring, not in this table (keys.py).
-    for k in keys.NAMES:
+    for k in keys.names():
         v = keys.get(k)
         if v or k in out:
             out[k] = ("…" + v[-4:]) if v else ""
@@ -1695,24 +1696,18 @@ def ui_tabs_save(b: TabsBody):
 def set_setting(b: SettingBody):
     allowed = {"embed_model", "index_hidden", "ai_mode", "theme", "favorites", "show_hidden", "view", "mcp_enabled", "binary_vectors",
                "power_user", "first_run_done",
-               "groq_api_key", "groq_model", "claude_model", "cloud_provider", "anthropic_api_key", "anthropic_model",
                "claude_config_dir", "index_code", "habits", "update_check"}
-    if b.key == "cloud_provider" and b.value not in ("auto", "groq", "anthropic", *(("claude",) if config.DEV else ())):
-        raise HTTPException(400, "cloud_provider must be auto, groq or anthropic")
-    if b.key in ("claude_model", "claude_config_dir") and not config.DEV:
+    if b.key in ("cloud_provider", "claude_model", "groq_model", "anthropic_model") or b.key.endswith("_api_key"):
+        # PLAN4 4: providers, their models and their keys go through /cloud/providers.
+        raise HTTPException(400, "Use Settings, AI providers (/cloud/providers) for cloud providers and keys")
+    if b.key == "claude_config_dir" and not config.DEV:
         raise HTTPException(400, "claude -p is not part of a release build")
-    if b.key.endswith("_api_key") and isinstance(b.value, str):
-        b.value = b.value.strip() or None
     if b.key == "ai_mode" and b.value not in ("local", "hybrid", "ask"):
         raise HTTPException(400, "ai_mode must be local, hybrid or ask")
     if b.key == "binary_vectors" and b.value not in ("auto", "on", "off"):
         raise HTTPException(400, "binary_vectors must be auto, on or off")
     if b.key not in allowed:
         raise HTTPException(400, f"Unknown setting: {b.key}")
-    if b.key.endswith("_api_key"):
-        from . import keys
-
-        return {"ok": True, "store": keys.put(b.key, b.value)}
     db.set_setting(b.key, b.value)
     if b.key == "binary_vectors":
         from .search import vectors

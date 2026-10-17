@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import Payload from '../components/Payload'
 import { EmptyState } from '../components/EmptyState'
 import { Chip, Ghost, SectionTitle, stagger } from '../components/ui'
 import { size, tildify } from '../lib/format'
-import { setScreen, summarize, useApp } from '../store'
+import { providerName, setScreen, summarize, useApp } from '../store'
 
 // A summary is a page too: the folder as the headline, a short summary, key points, and where it ran.
 export default function AnswerScreen() {
@@ -47,11 +48,9 @@ export default function AnswerScreen() {
           <div className="anim-pop border-l-2 border-accent pl-5">
             <div className="serif mb-2 text-[16px] leading-none">Your approval is needed</div>
             <p className="mb-3 max-w-[620px] text-muted">
-              Ask each time is on. Raven wants to send this redacted payload to <b className="text-text">{a.consent.provider}</b>. {a.consent.redacted} private items are replaced with placeholders.
+              Ask each time is on. Raven wants to send this redacted payload to <b className="text-text">{providerName(a.consent.provider)}</b>. {a.consent.redacted} private items are replaced with placeholders.
             </p>
-            <pre className="selectable mb-4 max-h-[46vh] overflow-auto whitespace-pre-wrap bg-console-bg p-4 font-mono text-[11.5px] text-console-text" style={{ borderRadius: 3 }}>
-              {a.consent.payload}
-            </pre>
+            <Payload text={a.consent.payload} className="mb-4 max-h-[46vh] overflow-auto rounded-[3px] bg-console-bg p-4 font-mono text-[11.5px] text-console-text" />
             <div className="flex items-center gap-7">
               <button className="btn-primary" onClick={() => void summarize(a.path, a.think, true)}>
                 Send ({size(new Blob([a.consent.payload]).size)})

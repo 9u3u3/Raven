@@ -11,6 +11,7 @@ import pytest  # noqa: E402
 from raven_core import db  # noqa: E402
 from raven_core.privacy import gate, rules  # noqa: E402
 from raven_core.router import cloud, local  # noqa: E402
+from raven_core.router import providers as registry  # noqa: E402
 from raven_core.router import router as core  # noqa: E402
 
 db.init()
@@ -62,47 +63,64 @@ def test_final_check_blocks_high_risk():
     assert gate.final_check("Card [CARD_1] is redacted")[0] is False
 
 
-def test_router_local_only_never_calls_cloud(tmp_path, monkeypatch):
+@pytest.fixture()
+def cloud_ready(monkeypatch):
+    """Two fake providers, a ready Privacy Filter, and the cloud online. Each call records the payload."""
+    sent = []
+
+    def chat(pid, system, user, schema):
+        assert isinstance(user, gate.Sealed)
+        sent.append((pid, str(user)))
+        return {"summary": "Resume of [PERSON_1].", "points": []}, f"{pid} · test"
+
+    monkeypatch.setattr(registry, "order", lambda: ["anthropic", "groq"])
+    monkeypatch.setattr(registry, "chat", chat)
+    monkeypatch.setattr(cloud, "online", lambda: True)
+    monkeypatch.setattr(gate, "layer2_ready", lambda: None)
+    return sent
+
+
+def test_router_local_only_never_calls_cloud(tmp_path, monkeypatch, cloud_ready):
     (tmp_path / "a.txt").write_text("hello")
     db.set_setting("ai_mode", "local")
-    calls = []
-    monkeypatch.setattr(cloud, "PROVIDERS", {"claude": lambda *a: calls.append(a), "groq": lambda *a: calls.append(a)})
-    monkeypatch.setattr(cloud, "configured", lambda: {"claude": True, "groq": True})
     monkeypatch.setattr(local, "available", lambda: True)
     monkeypatch.setattr(local, "chat", lambda *a, **k: {"summary": "local", "points": []})
     before = len(gate.ledger_list())
     res = core.run("folder_summary", str(tmp_path), think_harder=True)
     assert res["tier"] == "T2" and res["fallback"] == "Local only mode"
-    assert not calls and len(gate.ledger_list()) == before
+    assert not cloud_ready and len(gate.ledger_list()) == before
     db.set_setting("ai_mode", "hybrid")
 
 
-def test_router_hybrid_think_harder_redacts(tmp_path, monkeypatch):
+def test_router_hybrid_think_harder_redacts(tmp_path, cloud_ready):
     (tmp_path / "Rahul_Sharma_resume.txt").write_text("hello")
     db.set_setting("ai_mode", "hybrid")
-    sent = []
-
-    def fake_claude(system, user, schema):
-        sent.append(user)
-        return {"summary": "Resume of [PERSON_1].", "points": []}, "claude -p · test"
-
-    monkeypatch.setattr(cloud, "PROVIDERS", {"claude": fake_claude, "groq": fake_claude})
-    monkeypatch.setattr(cloud, "configured", lambda: {"claude": True, "groq": False})
     res = core.run("folder_summary", str(tmp_path), think_harder=True)
-    assert res["tier"] == "T3" and "Rahul" not in sent[0]
-    assert res["summary"] == "Resume of Rahul_Sharma_resume." or "Rahul" in res["summary"]
+    assert res["tier"] == "T3" and res["provider"] == "anthropic"
+    payload = cloud_ready[0][1]
+    assert "Rahul" not in payload
+    assert "Rahul" in res["summary"]
     row = gate.ledger_list(1)[0]
-    assert row["payload"] == sent[0] and "Rahul" not in row["payload"]
+    assert row["payload"] == payload and "Rahul" not in row["payload"]
 
 
-def test_router_ask_each_time_needs_consent(tmp_path, monkeypatch):
+def test_router_ask_each_time_needs_consent(tmp_path, cloud_ready):
     (tmp_path / "x.txt").write_text("hello")
     db.set_setting("ai_mode", "ask")
-    monkeypatch.setattr(cloud, "configured", lambda: {"claude": True, "groq": False})
     before = len(gate.ledger_list())
     res = core.run("folder_summary", str(tmp_path), think_harder=True)
-    assert res["needs_consent"] and len(gate.ledger_list()) == before
+    assert res["needs_consent"] and len(gate.ledger_list()) == before and not cloud_ready
     db.set_setting("ai_mode", "hybrid")
+
+
+def test_router_fails_closed_without_the_privacy_filter(tmp_path, monkeypatch, cloud_ready):
+    (tmp_path / "x.txt").write_text("hello")
+    monkeypatch.setattr(gate, "layer2_ready", lambda: gate.NOT_INSTALLED)
+    monkeypatch.setattr(local, "available", lambda: True)
+    monkeypatch.setattr(local, "chat", lambda *a, **k: {"summary": "local", "points": []})
+    res = core.run("folder_summary", str(tmp_path), think_harder=True)
+    assert res["tier"] == "T2" and "Privacy Filter is not installed" in res["fallback"]
+    assert not cloud_ready
 
 
 def test_names_with_people_are_redacted():
@@ -117,20 +135,9 @@ def test_names_with_people_are_redacted():
     assert r.redact("notes_final_v2.md", name=True) == "notes_final_v2.md"
 
 
-def test_router_prefers_the_chosen_provider(tmp_path, monkeypatch):
+def test_router_uses_the_user_order(tmp_path, monkeypatch, cloud_ready):
     (tmp_path / "x.txt").write_text("hello")
     db.set_setting("ai_mode", "hybrid")
-    db.set_setting("cloud_provider", "groq")
-    used = []
-
-    def fake(name):
-        def f(system, user, schema):
-            used.append(name)
-            return {"summary": "ok", "points": []}, name
-        return f
-
-    monkeypatch.setattr(cloud, "PROVIDERS", {"claude": fake("claude"), "groq": fake("groq")})
-    monkeypatch.setattr(cloud, "configured", lambda: {"claude": True, "groq": True})
+    monkeypatch.setattr(registry, "order", lambda: ["groq", "anthropic"])
     res = core.run("folder_summary", str(tmp_path), think_harder=True)
-    assert res["provider"] == "groq" and used == ["groq"]
-    db.set_setting("cloud_provider", "auto")
+    assert res["provider"] == "groq" and [p for p, _ in cloud_ready] == ["groq"]

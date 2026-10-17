@@ -214,6 +214,44 @@ def r_status():
     return status()
 
 
+class ClientBody(BaseModel):
+    id: str
+
+
+def _server_entry() -> dict:
+    return r_config()["config"]["mcpServers"]["raven"]
+
+
+@router.get("/clients")
+def r_clients():
+    """The MCP clients on this computer, and whether each one has Raven (PLAN4 R4)."""
+    from . import mcp_clients
+
+    return {"clients": mcp_clients.status(_server_entry())}
+
+
+@router.post("/clients/add")
+def r_clients_add(b: ClientBody):
+    from . import mcp_clients
+
+    try:
+        out = mcp_clients.add(b.id, _server_entry())
+    except mcp_clients.ClientError as e:
+        raise HTTPException(400, str(e)) from e
+    return {**out, "clients": mcp_clients.status(_server_entry())}
+
+
+@router.post("/clients/remove")
+def r_clients_remove(b: ClientBody):
+    from . import mcp_clients
+
+    try:
+        mcp_clients.remove(b.id)
+    except mcp_clients.ClientError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"ok": True, "clients": mcp_clients.status(_server_entry())}
+
+
 @router.get("/config")
 def r_config():
     """The block to paste into an MCP client's config. A packaged Raven starts itself with --mcp."""

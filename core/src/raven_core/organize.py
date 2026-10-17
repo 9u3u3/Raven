@@ -221,36 +221,40 @@ TREE_SYSTEM = (
 
 def _model_plan(root: str, files: list[os.DirEntry], rows: dict[str, dict]) -> tuple[dict, str, str]:
     from .router import cloud, local
+    from .router import providers as registry
     from .router import router as core
 
     from .fs.props import policy_for
 
     big = len(files) >= SMALL
-    providers = core.provider_order("folder_summary") if core.ai_mode() != "local" and not policy_for(root, "no_cloud") else []
-    red = gate.Redactor() if (big and providers) else None
+    order = core.provider_order("folder_summary") if core.ai_mode() != "local" and not policy_for(root, "no_cloud") else []
+    red = gate.Redactor() if (big and order) else None
     from .privacy.scope import is_private
 
     subs = sorted(d.name for d in os.scandir(root) if d.is_dir() and not d.name.startswith(".") and not is_private(d.path))
 
-    def r(x: str) -> str:
-        return red.redact(x, name=True) if red else x
+    titles = [((rows.get(de.name) or {}).get("title") or "")[:60] for de in files[:200]]
+    names = [*subs[:40], *(de.name for de in files[:200]), *(t for t in titles if t)]
+    safe = dict(zip(names, red.redact_names(names))) if red else {x: x for x in names}  # one layer-2 call (PLAN4 B7)
 
-    lines = [f"Existing folders: {', '.join(r(s) for s in subs[:40]) or 'none'}", "Files:"]
-    for n, de in enumerate(files[:200], 1):
+    lines = [f"Existing folders: {', '.join(safe[s] for s in subs[:40]) or 'none'}", "Files:"]
+    for n, (de, title) in enumerate(zip(files[:200], titles), 1):
         row = rows.get(de.name) or {}
         month = time.strftime("%Y-%m", time.localtime(row.get("mtime") or de.stat().st_mtime))
-        title = (row.get("title") or "")[:60]
-        lines.append(f"{n}. {r(de.name)} | {row.get('category') or 'unknown'} | {month}" + (f" | {r(title)}" if title else ""))
+        lines.append(f"{n}. {safe[de.name]} | {row.get('category') or 'unknown'} | {month}" + (f" | {safe[title]}" if title else ""))
     payload = "\n".join(lines)
     data = None
     tier, planner = "T2", local.LLM
     if red is not None:
-        blocked, why = gate.final_check(payload)
-        if not blocked:
-            for prov in providers:
+        try:
+            sealed = gate.seal(payload, red)
+        except gate.Blocked:
+            sealed = None
+        if sealed is not None:
+            for prov in order:
                 lid = gate.ledger_write("organize", "T3", prov, TREE_SYSTEM + "\n\n" + payload, len(red.mapping))
                 try:
-                    data, _ = cloud.PROVIDERS[prov](TREE_SYSTEM, payload, TREE_SCHEMA)
+                    data, _ = registry.chat(prov, TREE_SYSTEM, sealed, TREE_SCHEMA)
                     tier, planner = "T3", prov
                     break
                 except cloud.CloudError:

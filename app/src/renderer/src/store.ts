@@ -819,6 +819,12 @@ function sizeText(n: number): string {
 
 // ---------------------------------------------------------------- privacy and the router
 
+/** The name of a cloud provider id ("groq" gives "Groq"), from the privacy status. */
+export function providerName(id: string | null | undefined): string {
+  if (!id) return ''
+  return st().privacy?.provider_names?.[id] ?? id
+}
+
 export async function refreshPrivacy(): Promise<void> {
   try {
     set({ privacy: await get<PrivacyStatus>('/privacy/status') })

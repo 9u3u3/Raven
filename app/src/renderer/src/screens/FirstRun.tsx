@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import KeyField from '../components/KeyField'
-import ClaudeAccount from '../components/ClaudeAccount'
+import AiProviders from '../components/AiProviders'
 import FeaturePicker, { DeviceLine, choiceSize, defaultChoice, useFeatures, type Choice } from '../components/FeaturePicker'
 import OllamaSetup from '../components/OllamaSetup'
 import { indexText } from '../components/StatusLine'
@@ -61,7 +60,6 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<'local' | 'hybrid' | 'ask'>('hybrid')
   const [busy, setBusy] = useState(false)
   const [phase, setPhase] = useState<'setup' | 'ready'>('setup')
-  const [settings, setSettings] = useState<Record<string, unknown>>({})
   // The device check and the features (PLAN4 section 5.3): Raven ticks what runs well, the user may change it.
   const [fst, loadFeatures, setFst] = useFeatures()
   const [choice, setChoice] = useState<Choice | null>(null)
@@ -71,10 +69,8 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
   }, [fst, choice])
 
   const load = (): void => void get<Check>('/setup/check').then(setCheck).catch(() => {})
-  const loadSettings = (): void => void get<Record<string, unknown>>('/settings').then(setSettings).catch(() => {})
   useEffect(() => {
     load()
-    loadSettings()
   }, [])
 
   const folders = places ? [{ label: 'Home', path: home }, ...places.folders] : []
@@ -298,18 +294,9 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
         </Step>
 
         {mode !== 'local' && (
-          <Step n={4} k={8} title="Cloud keys">
-            <div className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-y-4">
-              <KeyField provider="groq" setting="groq_api_key" label="Groq API key" placeholder="gsk_… (free at console.groq.com)" stored={settings.groq_api_key as string} onSaved={loadSettings} />
-              <KeyField provider="anthropic" setting="anthropic_api_key" label="Anthropic API key" placeholder="sk-ant-… (console.anthropic.com)" stored={settings.anthropic_api_key as string} onSaved={loadSettings} />
-              {/* claude -p uses the claude.ai login: development builds only (PLAN4 B1). */}
-              {check?.core.dev && check.cloud.claude && (
-                <>
-                  <span className="text-muted">claude -p (dev)</span>
-                  <ClaudeAccount />
-                </>
-              )}
-            </div>
+          <Step n={4} k={8} title="AI providers">
+            {/* PLAN4 4: the same list as Settings, AI providers. Groq, Gemini and OpenRouter have free plans. */}
+            <AiProviders />
           </Step>
         )}
 

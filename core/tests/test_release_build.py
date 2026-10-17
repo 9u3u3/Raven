@@ -14,7 +14,7 @@ from fastapi import HTTPException  # noqa: E402
 
 from raven_core import app as app_mod  # noqa: E402
 from raven_core import config, db, keys, logs, notices  # noqa: E402
-from raven_core.router import cloud  # noqa: E402
+from raven_core.router import cloud, providers  # noqa: E402
 from raven_core.router import routes as router_routes  # noqa: E402
 
 db.init()
@@ -28,7 +28,8 @@ def release(monkeypatch):
 
 def test_a_release_build_never_offers_claude_p(release):
     assert cloud.claude_ok() is False
-    assert cloud.configured()["claude"] is False
+    assert cloud.configured().get("claude", False) is False
+    assert "claude" not in providers.presets()
     assert cloud.claude_accounts() == []
     assert router_routes.status()["dev"] is False
     assert app_mod.health()["dev"] is False
@@ -39,15 +40,17 @@ def test_a_release_build_refuses_the_claude_settings(release):
         with pytest.raises(HTTPException) as e:
             app_mod.set_setting(app_mod.SettingBody(key=key, value=value))
         assert e.value.status_code == 400
-    assert app_mod.set_setting(app_mod.SettingBody(key="cloud_provider", value="anthropic"))["ok"]
+    with pytest.raises(providers.ProviderError):
+        providers.add("claude")
 
 
 def test_a_development_build_keeps_claude_p(monkeypatch):
     monkeypatch.setattr(config, "DEV", True)
     monkeypatch.setattr(cloud.shutil, "which", lambda name: f"/usr/bin/{name}")
     assert cloud.claude_ok() is True
-    assert app_mod.set_setting(app_mod.SettingBody(key="cloud_provider", value="claude"))["ok"]
-    db.set_setting("cloud_provider", "auto")
+    providers.add("claude")
+    assert providers.order() == ["claude"]
+    providers.remove("claude")
 
 
 def test_the_log_file_cuts_long_messages(tmp_path, monkeypatch):
