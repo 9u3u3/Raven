@@ -665,7 +665,7 @@ def _prefer_specific(fused: dict[str, dict], cover: dict[str, float]) -> None:
     for path in sorted(fused, key=lambda p: p.count("/"), reverse=True):
         e = fused[path]
         p = os.path.dirname(path)
-        while p and p != "/":
+        while p and p != os.path.dirname(p):  # the root is its own parent ("/", "C:\\")
             a = fused.get(p)
             # A parent that matched by its own name or project name stays the answer.
             named = any(k in a["ranks"] for k in ("name", "disk", "project")) if a is not None else False

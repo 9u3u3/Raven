@@ -88,10 +88,11 @@ def largest(path: str, limit: int = 60):
     if not found:
         raise HTTPException(404, "No scan covers this folder yet")
     res, _ = found
-    root = os.path.abspath(path).rstrip("/") + "/"
+    top = os.path.abspath(path)
+    root = os.path.join(top, "")  # with the separator at the end: "/x/" or "C:\\x\\"
     out = []
     for size, p, mtime, atime, cat in res.largest:
-        if p.startswith(root) or os.path.abspath(path) == "/":
+        if p.startswith(root) or top == os.path.dirname(top):
             out.append({"path": p, "name": os.path.basename(p), "size": size, "mtime": mtime * 1000, "atime": atime * 1000, "cat": cat})
             if len(out) >= limit:
                 break

@@ -167,11 +167,11 @@ def _resolve_folder(name: str, ctx: Context) -> str | None:
     if name.startswith("~"):
         p = os.path.expanduser(name)
         return p if os.path.isdir(p) else None
-    if name.startswith("/"):
+    if os.path.isabs(name):
         return name if os.path.isdir(name) else None
-    # The folder in view, or one of its parents, by name.
+    # The folder in view, or one of its parents, by name. The root is its own parent ("/", "C:\\").
     anc = ctx.cwd
-    while anc and anc != "/":
+    while anc and anc != os.path.dirname(anc):
         if os.path.basename(anc).lower() == name.lower():
             return anc
         anc = os.path.dirname(anc)

@@ -275,10 +275,16 @@ def _model_plan(root: str, files: list[os.DirEntry], rows: dict[str, dict]) -> t
         except (KeyError, ValueError, IndexError, TypeError):
             continue
         folder = gate.restore(str(it.get("folder") or ""), red.mapping if red else {}).strip().strip("/")
-        if ".." in folder.split("/") or folder.startswith("/"):
+        if _unsafe_folder(folder):
             continue
         out[de.name] = (folder or None, gate.restore(str(it.get("reason") or ""), red.mapping if red else {}), None)
     return out, tier, planner
+
+
+def _unsafe_folder(folder: str) -> bool:
+    """A folder name from a model must stay inside the root: no "..", no absolute path, no drive (Windows)."""
+    parts = folder.replace("\\", "/").split("/")
+    return ".." in parts or folder.startswith(("/", "\\")) or os.path.isabs(folder) or (os.name == "nt" and ":" in folder)
 
 
 def _model_plan_local(root, files, rows, subs):
@@ -296,7 +302,7 @@ def _model_plan_local(root, files, rows, subs):
         except (KeyError, ValueError, IndexError, TypeError):
             continue
         folder = str(it.get("folder") or "").strip().strip("/")
-        if ".." in folder.split("/") or folder.startswith("/"):
+        if _unsafe_folder(folder):
             continue
         out[de.name] = (folder or None, str(it.get("reason") or ""), None)
     return out, "T2", local.LLM
