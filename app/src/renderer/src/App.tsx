@@ -45,6 +45,7 @@ import TopBar from './components/TopBar'
 import TabBar from './components/TabBar'
 import Sidebar from './components/Sidebar'
 import StatusLine from './components/StatusLine'
+import ProgressCard from './components/ProgressCard'
 import CommandBar from './components/CommandBar'
 import ConfirmDialog from './components/ConfirmDialog'
 import ConflictDialog from './components/ConflictDialog'
@@ -374,6 +375,10 @@ export default function App() {
       // Auto compression ran in the background: say what it did, with Undo (section 9.8).
       on('auto_compress', (e) => say(`${e.label}: ${e.jobs} job${e.jobs === 1 ? '' : 's'}, saved ${Math.round(e.saved / 1048576)} MB`, 'info', { undo: true })),
       on('copy_job', (m: { job: CopyJob }) => onCopyJob(m.job)),
+      on('delete_progress', (m: { done: number; total: number; name: string }) => {
+        const p = useApp.getState().progress
+        if (p) useApp.setState({ progress: { ...p, done: m.done, total: m.total, name: m.name } })
+      }),
       // A watch rule acted (rules.py): say what it did, with Undo.
       on('rule_applied', (e) => say(`${e.label}: ${e.count} file${e.count === 1 ? '' : 's'}`, 'info', { undo: true })),
       on('journal', () => {
@@ -450,6 +455,7 @@ export default function App() {
         <CommandBar />
       </div>
       <StatusLine />
+      <ProgressCard />
       <ConfirmDialog />
       <ConflictDialog />
       <CloudReview />

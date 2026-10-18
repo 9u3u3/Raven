@@ -55,6 +55,8 @@ type State = {
   clipboard: { mode: 'copy' | 'cut'; paths: string[] } | null
   renaming: string | null
   status: Status | null
+  /** A long change with a known item count (a permanent delete): the progress card shows it. */
+  progress: { label: string; done: number; total: number; name: string } | null
   journal: Journal
   index: IndexProgress | null
   free: { free: number; total: number } | null
@@ -163,6 +165,7 @@ export const useApp = create<State>(() => ({
   clipboard: null,
   renaming: null,
   status: null,
+  progress: null,
   journal: { undo: null, redo: null },
   index: null,
   free: null,
@@ -661,12 +664,15 @@ export function deleteSelection(): void {
           : `Raven deletes ${paths.length} items permanently. You cannot undo this.`,
       action: 'Delete',
       danger: true,
-      run: () =>
+      run: () => {
+        // The sidecar sends delete_progress after each item (App.tsx). The card shows it until the call ends.
+        set({ progress: { label: 'Deleting permanently', done: 0, total: paths.length, name: '' } })
         void change(
           `Deleting ${plural(paths.length, 'item')}…`,
           () => post<{ count: number; journal: Journal }>('/fs/delete', { paths }),
           (r) => `Deleted ${plural(r.count, 'item')} permanently`
-        )
+        ).finally(() => set({ progress: null }))
+      }
     }
   })
 }

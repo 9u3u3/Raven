@@ -922,7 +922,16 @@ def fs_job_control(job_id: str, action: str):
 
 @app.post("/fs/delete")
 async def fs_delete(b: PathsBody):
-    n = await run_in_threadpool(ops.delete, b.paths)
+    last = [0.0]
+
+    def progress(done: int, total: int, path: str) -> None:
+        # At most 10 events a second: a delete of many small items must not flood the socket.
+        now = time.monotonic()
+        if done == total or now - last[0] >= 0.1:
+            last[0] = now
+            events.publish("delete_progress", done=done, total=total, name=os.path.basename(path))
+
+    n = await run_in_threadpool(ops.delete, b.paths, "manual", progress)
     return {"count": n, "journal": ops.peek()}
 
 

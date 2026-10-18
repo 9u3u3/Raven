@@ -128,3 +128,25 @@ def test_delete_is_not_undoable(tree):
 def test_copy_into_itself(tree):
     with pytest.raises(ops.OpError):
         ops.copy([str(tree / "a")], str(tree / "a" / "sub"))
+
+
+def test_delete_many_folders_reports_progress(tmp_path):
+    dirs = []
+    for n in range(9):
+        d = tmp_path / f"node_modules.{n}"
+        (d / "pkg").mkdir(parents=True)
+        for k in range(20):
+            (d / "pkg" / f"f{k}.js").write_text("x")
+        dirs.append(str(d))
+    seen = []
+    n = ops.delete(dirs, progress=lambda done, total, path: seen.append((done, total, path)))
+    assert n == 9 and not any(os.path.exists(d) for d in dirs)
+    assert seen == [(k + 1, 9, d) for k, d in enumerate(dirs)]
+
+
+def test_delete_stops_at_the_first_error(tmp_path):
+    ok = tmp_path / "ok.txt"
+    ok.write_text("x")
+    with pytest.raises(OSError):
+        ops.delete([str(tmp_path / "missing.txt")] + [str(ok)])
+    assert ok.exists()  # the items after the error stay

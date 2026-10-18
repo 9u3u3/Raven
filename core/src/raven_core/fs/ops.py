@@ -372,7 +372,8 @@ def restore(paths: Iterable[str], source: str = "manual") -> list[str]:
     return out
 
 
-def delete(paths: Iterable[str], source: str = "manual") -> int:
+def delete(paths: Iterable[str], source: str = "manual", progress=None) -> int:
+    """Delete permanently. progress(done, total, path) runs after each item."""
     paths = list(paths)
     g = Group(source, f"Delete {len(paths)} item{'s' if len(paths) != 1 else ''} permanently")
     try:
@@ -386,6 +387,8 @@ def delete(paths: Iterable[str], source: str = "manual") -> int:
             if in_trash(p):
                 (pp.parent.parent / "info" / f"{pp.name}.trashinfo").unlink(missing_ok=True)
             g.add("delete", p, None)
+            if progress:
+                progress(len(g.rows), len(paths), p)
     finally:
         g.commit()
         _end_groups_at([r[1] for r in g.rows])
