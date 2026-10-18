@@ -1,4 +1,4 @@
-import type { LucideIcon } from 'lucide-react'
+import { ChevronDown, type LucideIcon } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 
 // Shared building blocks. The language: hairlines, a serif for headings, text instead of boxes.
@@ -232,6 +232,27 @@ export function ResizeEdge({ side, get, onWidth, onDone, min, max, reset }: {
       className={`group absolute top-0 z-20 h-full w-[6px] cursor-col-resize ${side === 'right' ? '-right-[3px]' : '-left-[3px]'}`}
     >
       <span className="absolute left-[2px] top-0 h-full w-[2px] bg-accent opacity-0 transition-opacity group-hover:opacity-100" />
+    </div>
+  )
+}
+
+/** A label with its description hidden. The chevron after the label shows the description and hides it again. */
+export function Explained({ label, text, className = '' }: { label: ReactNode; text?: ReactNode; className?: string }) {
+  const [open, setOpen] = useState(false)
+  if (!text) return <div className={className}>{label}</div>
+  return (
+    <div className={className}>
+      <button
+        type="button"
+        aria-expanded={open}
+        title={open ? 'Hide the description' : 'Show the description'}
+        onClick={() => setOpen((v) => !v)}
+        className="group inline-flex max-w-full items-center gap-1.5 text-left"
+      >
+        {label}
+        <ChevronDown size={13} strokeWidth={1.8} className={`shrink-0 text-muted transition-transform duration-200 group-hover:text-text ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <div className="anim-fade mt-1 max-w-[560px] text-[12.5px] leading-snug text-muted">{text}</div>}
     </div>
   )
 }

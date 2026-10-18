@@ -72,6 +72,10 @@ type State = {
   organizeView: 'plan' | 'rules' | 'map'
   /** The first-run screen shows (section 12.7). */
   firstRun: boolean
+  /** The welcome cards show: at the first start, and again from Settings, Help. */
+  welcome: boolean
+  /** The Settings page that shows (one page at a time). */
+  settingsTab: string
   /** The encrypted index waits for its passphrase (secure.py). */
   locked: boolean
   /** Power user mode (section 9.13): administrator retries, system folders. */
@@ -174,6 +178,8 @@ export const useApp = create<State>(() => ({
   powerUser: false,
   locked: false,
   firstRun: false,
+  welcome: false,
+  settingsTab: 'general',
   dual: null,
   organizeView: 'plan',
   favorites: ls.get('favorites', [] as string[]),

@@ -66,6 +66,7 @@ import ResultsScreen from './screens/ResultsScreen'
 import SettingsScreen from './screens/SettingsScreen'
 import OrganizeScreen from './screens/OrganizeScreen'
 import { FolderPickerHost, pickerOpen } from './components/FolderPicker'
+import Welcome from './components/Welcome'
 
 function isTyping(e: KeyboardEvent): boolean {
   const t = e.target as HTMLElement | null
@@ -332,7 +333,7 @@ async function boot(): Promise<void> {
   useApp.setState({ places, journal, index, ready: true, version: health.version })
   const settings = await get<Record<string, unknown>>('/settings').catch(() => ({}) as Record<string, unknown>)
   // First run (section 12.7): no folders and no first-run mark. An older install with folders skips it.
-  useApp.setState({ powerUser: !!settings.power_user, firstRun: !settings.first_run_done && !index.roots.length })
+  useApp.setState({ powerUser: !!settings.power_user, firstRun: !settings.first_run_done && !index.roots.length, welcome: !settings.welcome_done })
   void refreshGhost()
   void refreshPrivacy()
   // Tabs from the last session come back. The active one lists its folder now, the others when you open them.
@@ -355,6 +356,7 @@ export default function App() {
   const locked = useApp((s) => s.locked)
   const firstRun = useApp((s) => s.firstRun)
   const ready = useApp((s) => s.ready)
+  const welcome = useApp((s) => s.welcome)
 
   useEffect(() => {
     void boot()
@@ -398,7 +400,13 @@ export default function App() {
 
   if (locked) return <Unlock />
   if (!ready && !firstRun) return <Boot />
-  if (firstRun) return <FirstRun onDone={() => useApp.setState({ firstRun: false })} />
+  // The welcome cards cover the first-run screen too: they come first at the first start.
+  if (firstRun) return (
+    <>
+      <FirstRun onDone={() => useApp.setState({ firstRun: false })} />
+      {welcome && <Welcome />}
+    </>
+  )
   return (
     <div className="flex h-full flex-col">
       <TopBar />
@@ -446,6 +454,7 @@ export default function App() {
       <ConflictDialog />
       <CloudReview />
       <FolderPickerHost />
+      {welcome && <Welcome />}
       <BatchRename />
       <ConnectDialog />
       <LatencyOverlay />

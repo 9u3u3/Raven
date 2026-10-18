@@ -30,6 +30,7 @@ def prepare(data: str, root: str) -> None:
     sc = rdt.Sidecar(data)
     try:
         sc.post("/settings", {"key": "first_run_done", "value": True})
+        sc.post("/settings", {"key": "welcome_done", "value": True})
         sc.post("/index/roots", {"roots": [root]})
         t = time.time()
         while time.time() - t < 300:

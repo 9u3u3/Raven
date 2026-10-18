@@ -357,7 +357,7 @@ function createWindow(): void {
   if (shot) {
     win.webContents.once('did-finish-load', () => {
       // RAVEN_SHOT_SCREEN (files, space, organize, privacy, settings, ask) and RAVEN_SHOT_PATH pick the view.
-      // RAVEN_SHOT_FONT and RAVEN_SHOT_THEME (light, dark) set the look. RAVEN_SHOT_SECTION scrolls Settings.
+      // RAVEN_SHOT_FONT and RAVEN_SHOT_THEME (light, dark) set the look. RAVEN_SHOT_SECTION opens a Settings page.
       // RAVEN_SHOT_SUMMARY=<folder> starts a think-harder summary, so the cloud review shows (PLAN4 7.7).
       const view = JSON.stringify({ screen: process.env.RAVEN_SHOT_SCREEN || '', path: process.env.RAVEN_SHOT_PATH || '', font: process.env.RAVEN_SHOT_FONT || '', theme: process.env.RAVEN_SHOT_THEME || '', section: process.env.RAVEN_SHOT_SECTION || '', summary: process.env.RAVEN_SHOT_SUMMARY || '' })
       setTimeout(() => void win?.webContents.executeJavaScript(`window.__ravenShot && window.__ravenShot(${view})`), 2500)

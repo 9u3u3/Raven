@@ -25,9 +25,8 @@ export function installTestHooks(): void {
       document.head.appendChild(st)
       useApp.setState({ theme })
     }
-    // A Settings section (RAVEN_SHOT_SECTION): scroll it to the top once the screen shows.
-    // A second try: a section that loads its data first (MCP clients) is not there yet at 3 s.
+    // A Settings page (RAVEN_SHOT_SECTION).
     if (summary) setTimeout(() => void summarize(summary, true), 1500)
-    if (section) for (const ms of [3000, 5500]) setTimeout(() => document.getElementById(`set-${section}`)?.scrollIntoView({ block: 'start' }), ms)
+    if (section) useApp.setState({ settingsTab: section })
   }
 }

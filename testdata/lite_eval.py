@@ -116,6 +116,7 @@ def run(model: str, limits: bool, home: str | None = None) -> dict:
     th = threading.Thread(target=sample, daemon=True)
     try:
         sc.post("/settings", {"key": "first_run_done", "value": True})
+        sc.post("/settings", {"key": "welcome_done", "value": True})
         sc.post("/lite/mode", {"mode": "lite"})
         sc.post("/settings", {"key": "embed_model", "value": model})
         th.start()

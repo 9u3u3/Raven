@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { get, on, post } from '../lib/api'
 import { size } from '../lib/format'
 import { say, useApp } from '../store'
-import { Ghost, Switch, Track, stagger } from './ui'
+import { Explained, Ghost, Switch, Track, stagger } from './ui'
 
 export type Fit = { level: 'good' | 'slow' | 'no'; reason: string }
 export type Variant = { id: string; label: string; note: string; mb: number; missing_mb: number; present: boolean; fit: Fit; ram_use: number; recommended: boolean; ollama: boolean }
@@ -277,8 +277,15 @@ export default function FeaturePicker({
           )}
         </span>
         <span className="min-w-0">
-          <span className={`block font-medium ${mode === 'live' && !fixed ? 'pl-3' : ''}`}>{f.label}</span>
-          <span className={`block text-[12.5px] text-muted ${mode === 'live' && !fixed ? 'pl-3' : ''}`}>{f.adds}</span>
+          {mode === 'live' ? (
+            // Settings: the description stays hidden until the user opens it. The first-run list shows it.
+            <Explained className={fixed ? '' : 'pl-3'} label={<span className="font-medium">{f.label}</span>} text={f.adds} />
+          ) : (
+            <>
+              <span className="block font-medium">{f.label}</span>
+              <span className="block text-[12.5px] text-muted">{f.adds}</span>
+            </>
+          )}
           <span className={`mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 ${mode === 'live' && !fixed ? 'pl-3' : ''}`}>
             {f.kind !== 'builtin' && <FitDot fit={fit} />}
             {f.variants && (

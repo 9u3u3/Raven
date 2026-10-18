@@ -1741,7 +1741,7 @@ def ui_tabs_save(b: TabsBody):
 @app.post("/settings")
 def set_setting(b: SettingBody):
     allowed = {"embed_model", "index_hidden", "ai_mode", "theme", "favorites", "show_hidden", "view", "mcp_enabled", "binary_vectors",
-               "power_user", "first_run_done",
+               "power_user", "first_run_done", "welcome_done",
                "claude_config_dir", "index_code", "habits", "update_check"}
     if b.key in ("cloud_provider", "claude_model", "groq_model", "anthropic_model") or b.key.endswith("_api_key"):
         # PLAN4 4: providers, their models and their keys go through /cloud/providers.

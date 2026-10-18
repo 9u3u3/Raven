@@ -8,24 +8,21 @@ import AiProviders from '../components/AiProviders'
 import PrivacyWords from '../components/PrivacyWords'
 import FeaturePicker, { DeviceLine, useFeatures } from '../components/FeaturePicker'
 import OllamaSetup from '../components/OllamaSetup'
-import { Chip, Ghost, PageHeader, Seg, Switch, Track, stagger } from '../components/ui'
+import { Chip, Explained, Ghost, Seg, Switch, Track, stagger } from '../components/ui'
 import { pickFolder } from '../components/FolderPicker'
 
-// One long page with section headings, not tabs (section 12.4).
+// One page at a time: the list on the left picks the page. Each description stays hidden until the user opens it.
 
-function Section({ id, title, text, children, i = 0 }: { id: string; icon?: LucideIcon; title: string; text?: string; children: React.ReactNode; i?: number }) {
+function Section({ id, title, text, children }: { id: string; icon?: LucideIcon; title: string; text?: string; children: React.ReactNode; i?: number }) {
   return (
-    <section id={`set-${id}`} data-section={id} className="mb-4 scroll-mt-8">
-      <div className="anim-rule h-px bg-line" style={stagger(i)} />
-      <div className="anim-row mb-5 mt-5" style={stagger(i)}>
-        <h2 className="serif text-[18px] leading-none">{title}</h2>
-        {text && <p className="mt-2 max-w-[640px] text-muted">{text}</p>}
+    <section id={`set-${id}`} data-section={id} className="anim-fade mb-4">
+      <div className="mb-5 border-b border-line pb-4">
+        <Explained label={<span role="heading" aria-level={2} className="serif text-[22px] leading-none">{title}</span>} text={text} />
       </div>
       {children}
     </section>
   )
 }
-/** One setting: a label and what it does on the left, the control on the right. */
 /** Folder rules (PLAN2 P2-5): one row per folder, four switches. Add a folder from its context menu. */
 function FolderRules() {
   const policies = useApp((s) => s.policies)
@@ -91,8 +88,7 @@ type Update = { enabled: boolean; current: string; latest?: string; url?: string
 function Sub({ title, text, children }: { title: string; text?: string; children: React.ReactNode }) {
   return (
     <div className="mb-7">
-      <div className="label mb-1">{title}</div>
-      {text && <p className="mb-3 max-w-[640px] text-[12.5px] text-muted">{text}</p>}
+      <Explained className="mb-3" label={<span className="label">{title}</span>} text={text} />
       {children}
     </div>
   )
@@ -131,10 +127,10 @@ function UpdatesSection({ on, onChange }: { on: boolean; onChange: (v: boolean) 
   const mine = start < 0 ? '' : log.slice(start + 1, next < 0 ? undefined : next)
   return (
     <Section id="updates" i={8} title="Updates">
-      <Row label="Version" text={about?.dev ? 'Development build' : 'Release build'}>
+      <Row label="Version" status={about?.dev ? 'Development build' : 'Release build'}>
         <span className="mono">{about?.version ?? ''}</span>
       </Row>
-      <Row label="Check for updates" text={note}>
+      <Row label="Check for updates" text="Raven asks GitHub once a day for the newest version. The request holds no file data." status={note}>
         <Switch on={on} label="Check for updates" onChange={onChange} />
       </Row>
       {u?.newer && u.url && (
@@ -162,12 +158,13 @@ function UpdatesSection({ on, onChange }: { on: boolean; onChange: (v: boolean) 
   )
 }
 
-function Row({ label, text, children }: { label: string; text?: string; children: React.ReactNode }) {
+/** One setting: the label (its description opens from the chevron), a state line that always shows, the control. */
+function Row({ label, text, status, children }: { label: string; text?: string; status?: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-line/70 py-2">
       <div className="min-w-0">
-        <div>{label}</div>
-        {text && <div className="max-w-[520px] text-[12.5px] leading-snug text-muted">{text}</div>}
+        <Explained label={<span>{label}</span>} text={text} />
+        {status && <div className="max-w-[520px] text-[12.5px] leading-snug text-muted">{status}</div>}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -313,7 +310,7 @@ function FeaturesSection() {
           </Ghost>
         </span>
       </div>
-      <Row label="Ollama" text={st.ollama.running ? `${st.ollama.version ?? ''} running${st.ollama.managed ? ', installed by Raven' : ''}` : st.ollama.installed ? 'installed, not running' : 'not installed'}>
+      <Row label="Ollama" status={st.ollama.running ? `${st.ollama.version ?? ''} running${st.ollama.managed ? ', installed by Raven' : ''}` : st.ollama.installed ? 'installed, not running' : 'not installed'}>
         <Chip tone={st.ollama.running ? 'good' : usesOllama ? 'bad' : 'plain'}>{st.ollama.running ? 'running' : 'off'}</Chip>
       </Row>
       {usesOllama && !st.ollama.running && (
@@ -403,6 +400,9 @@ function HelpSection() {
     )
   return (
     <Section id="help" title="Help" i={9}>
+      <Row label="Welcome cards" text="The cards from the first start: what Raven does, and what stays on this computer.">
+        <Ghost onClick={() => useApp.setState({ welcome: true })}>Show</Ghost>
+      </Row>
       <Row label="Guide" text="Press ? anywhere for the guide, the tour and a short help page for the screen you are on.">
         <kbd className="kbd">?</kbd>
       </Row>
@@ -610,7 +610,7 @@ function DataSection() {
     <Section id="data" i={7} title="Data" text="Raven keeps its index, models and settings in one folder. Your files stay where they are.">
       {d && (
         <>
-          <Row label="Data folder" text={d.models_inside ? undefined : `Models: ${d.models_dir}`}>
+          <Row label="Data folder" status={d.models_inside ? undefined : `Models: ${d.models_dir}`}>
             <span className="flex items-center gap-4">
               <span className="mono max-w-[360px] truncate text-[12px]" title={d.dir}>
                 {d.dir}
@@ -653,7 +653,11 @@ function StartRow() {
   useEffect(() => void window.raven?.loginItem().then(setSt), [])
   if (!st) return null
   return (
-    <Row label="Start with the computer" text={st.supported ? 'Raven opens minimized when you log in, and keeps the index up to date.' : 'Only the installed app can start with the computer.'}>
+    <Row
+      label="Start with the computer"
+      text={st.supported ? 'Raven opens minimized when you log in, and keeps the index up to date.' : undefined}
+      status={st.supported ? undefined : 'Only the installed app can start with the computer.'}
+    >
       <Switch on={st.on} label="Start with the computer" onChange={(v) => void window.raven?.loginItem(v).then(setSt)} />
     </Row>
   )
@@ -712,29 +716,22 @@ export default function SettingsScreen() {
   ]
   const aiMode = useApp((s) => s.privacy?.ai_mode ?? 'hybrid')
   const scroller = useRef<HTMLDivElement>(null)
-  const [here, setHere] = useState('general')
+  const tab = useApp((s) => s.settingsTab)
+  const here = NAV.some(([id]) => id === tab) ? tab : 'general'
   const [keyFilter, setKeyFilter] = useState('')
-  const onScroll = (): void => {
-    const box = scroller.current
-    if (!box) return
-    const top = box.getBoundingClientRect().top
-    let cur = NAV[0][0]
-    for (const [id] of NAV) {
-      const el = document.getElementById(`set-${id}`)
-      if (el && el.getBoundingClientRect().top - top < 140) cur = id
-    }
-    setHere(cur)
+  const jump = (id: string): void => {
+    useApp.setState({ settingsTab: id })
+    scroller.current?.scrollTo({ top: 0 })
   }
-  const jump = (id: string): void => document.getElementById(`set-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   const keys = KEYS.filter(([k, v]) => `${k} ${v}`.toLowerCase().includes(keyFilter.toLowerCase()))
   const used = index ? (index.files ? 1 - index.text_pending / Math.max(index.files, 1) : 0) : 0
 
   return (
-    <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
+    <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
       <div className="flex gap-4 px-4 pb-6 pt-6">
-        <nav className="sticky top-0 hidden h-fit w-[200px] shrink-0 self-start pt-2 md:block">
+        <nav className="sticky top-0 h-fit w-[180px] shrink-0 self-start pt-1" aria-label="Settings pages">
           {NAV.map(([id, label], n) => (
-            <button key={id} onClick={() => jump(id)} className="group relative flex w-full items-baseline gap-3 py-1.5 text-left">
+            <button key={id} aria-current={here === id ? 'page' : undefined} onClick={() => jump(id)} className="group relative flex w-full items-baseline gap-3 py-1.5 text-left">
               <span className={`serif w-6 text-[17px]  leading-none transition-colors duration-300 ${here === id ? 'text-accent' : 'text-muted/70'}`}>{String(n + 1).padStart(2, '0')}</span>
               <span className={`transition-all duration-300 ${here === id ? 'translate-x-1 text-text' : 'text-muted group-hover:text-text'}`}>{label}</span>
               <span className={`absolute -left-4 top-1/2 h-px bg-accent transition-all duration-300 ${here === id ? 'w-3' : 'w-0'}`} />
@@ -744,6 +741,7 @@ export default function SettingsScreen() {
 
         <div className="min-w-0 flex-1">
 
+          {here === 'general' && (
           <Section id="general" i={1} title="General">
             <StartRow />
             <div className="label mb-2 mt-6">Indexed folders</div>
@@ -789,7 +787,9 @@ export default function SettingsScreen() {
               </div>
             )}
           </Section>
+          )}
 
+          {here === 'appearance' && (
           <Section id="appearance" i={2} title="Appearance">
             <div className="mb-5 grid grid-cols-3 gap-3">
               {(['system', 'light', 'dark'] as const).map((t) => {
@@ -836,11 +836,12 @@ export default function SettingsScreen() {
               </div>
             </Row>
           </Section>
+          )}
 
-          <FeaturesSection />
+          {here === 'features' && <FeaturesSection />}
 
-          <Section
-            id="cloud"
+          {here === 'cloud' && (
+          <Section id="cloud"
             i={4}
             title="AI providers"
             text="Heavy tasks and Think harder can use a cloud model, after redaction and your review. Raven tries the providers in this order and uses the first one that works."
@@ -859,7 +860,9 @@ export default function SettingsScreen() {
               <AiProviders />
             </div>
           </Section>
+          )}
 
+          {here === 'privacy' && (
           <Section id="privacy" i={5} title="Privacy" text="What Raven hides before a cloud request, and what no AI reads at all. The Privacy screen shows the ledger of what went.">
             <Sub
               title="Words to always hide"
@@ -878,12 +881,14 @@ export default function SettingsScreen() {
               <PrivacySent />
             </Sub>
           </Section>
+          )}
 
-          <McpSection />
-          <DataSection />
-          <UpdatesSection on={!!settings.update_check} onChange={(v) => void setSetting('update_check', v)} />
-          <HelpSection />
+          {here === 'integrations' && <McpSection />}
+          {here === 'data' && <DataSection />}
+          {here === 'updates' && <UpdatesSection on={!!settings.update_check} onChange={(v) => void setSetting('update_check', v)} />}
+          {here === 'help' && <HelpSection />}
 
+          {here === 'advanced' && (
           <Section id="advanced" i={10} title="Advanced">
             <Sub title="Power user">
             <Row label="Power user mode">
@@ -941,6 +946,7 @@ export default function SettingsScreen() {
             </div>
             </Sub>
           </Section>
+          )}
         </div>
       </div>
     </div>

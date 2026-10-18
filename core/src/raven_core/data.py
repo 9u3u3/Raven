@@ -16,7 +16,7 @@ from pathlib import Path
 from . import config, db
 
 # Settings that the export leaves out: window state, caches and secrets.
-_NOT_EXPORTED = {"ui_tabs", "galaxy", "update_last", "first_run_done"}
+_NOT_EXPORTED = {"ui_tabs", "galaxy", "update_last", "first_run_done", "welcome_done"}
 
 
 def _size(path: Path) -> int:
