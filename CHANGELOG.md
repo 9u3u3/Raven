@@ -5,6 +5,21 @@ A PATCH step only fixes problems. A beta build adds `-beta.N` (for example `0.3.
 `core/src/raven_core/config.py`, `core/pyproject.toml` and `app/package.json` hold the same version.
 `tests/test_release_build.py` checks this.
 
+## 0.3.0-beta.2 (2026-10-18)
+
+### New
+
+- The `raven` terminal command, on Linux and macOS. It has one feature now: the Ctrl+K search of the app, in the
+  terminal. Enter goes to the folder of the result. For a file, it goes to the folder that holds it.
+- Settings, Integrations, Terminal: the list of the terminal features, a button that installs the command in
+  `~/.local/bin/raven`, and the line for bash, zsh or fish that adds Ctrl+K and `rv`.
+- The command uses the running Raven. When Raven is not running, it starts the Raven core for the time that it
+  runs.
+
+### Fixed
+
+- The sidecar exits when its app is gone, also when it cannot unload the Ollama models.
+
 ## 0.3.0-beta.1 (2026-10-18)
 
 The first build for early users, on Linux and Windows. The builds and the issues are in
