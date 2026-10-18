@@ -264,6 +264,31 @@ screenshot, and checks that the sidecar stops with the app. `CHANGELOG.md` holds
 The tools: `search_files`, `ask_files` (local model), `read_file`, `list_folder`, `plan_organize`, `raven_status`.
 Each answer is redacted, and the Privacy screen logs it as `mcp <tool>`.
 
+## Search from the terminal
+
+`raven` is the Ctrl+K search of the app as a terminal UI. Enter goes to the folder of the result (for a file, the
+folder that holds it).
+
+1. In Raven, open Settings, Integrations, Terminal, and press **Install**. Raven writes `~/.local/bin/raven`.
+   In development, `cd core && uv sync` also makes `core/.venv/bin/raven`.
+2. Copy the line for your shell from that page into your shell rc file:
+   - bash: `eval "$(~/.local/bin/raven init bash)"`
+   - zsh: `eval "$(~/.local/bin/raven init zsh)"`
+   - fish: `~/.local/bin/raven init fish | source`
+3. Press Ctrl+K, or type `rv` and a query.
+
+The page lists the features that the terminal command has now. Search is the only one.
+For the AppImage, the command mounts the AppImage for the time that it runs (`--appimage-mount`). If you move the
+AppImage, press **Install** again. Windows has no terminal command yet.
+
+Keys: Enter goes to the folder, Ctrl+O opens the item, Up and Down (or Ctrl+P and Ctrl+N) select, Ctrl+U clears,
+Esc quits. An empty query lists the folders that you open most. The bash setup replaces the Ctrl+K "kill line" key.
+`raven init bash --no-key` gives only `rv`.
+
+The CLI uses the running Raven. When Raven is not running, the CLI starts its own sidecar, and that sidecar stops
+about 2 s after the CLI. While it runs, the app cannot start its sidecar (one sidecar for each data folder).
+Only the bash setup has a test. Nobody has tested the zsh and fish setups.
+
 ## Tests and measurements
 
 ```bash

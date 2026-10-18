@@ -423,6 +423,34 @@ def about():
 # ---------------------------------------------------------------- Settings, Data (PLAN4 section 6 item 7)
 
 
+# The `raven` terminal command (cli.py): its features, its launcher in ~/.local/bin and the shell setup.
+@app.get("/cli")
+def cli_status():
+    from . import cli
+
+    return cli.status()
+
+
+@app.post("/cli/install")
+def cli_install():
+    from . import cli
+
+    try:
+        return cli.install()
+    except (cli.ApiError, OSError) as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/cli/remove")
+def cli_remove():
+    from . import cli
+
+    try:
+        return cli.remove()
+    except (cli.ApiError, OSError) as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.get("/data")
 async def data_info():
     from . import data

@@ -40,10 +40,13 @@ def _watch_parent() -> None:
         while True:
             time.sleep(2)
             if not alive():
-                from .memory import unload_ollama
+                try:
+                    from .memory import unload_ollama
 
-                unload_ollama()  # a system Ollama keeps running, without Raven's models
-                os._exit(0)
+                    unload_ollama()  # a system Ollama keeps running, without Raven's models
+                finally:
+                    # Exit also when the unload fails (an AppImage mount that is gone cannot load modules).
+                    os._exit(0)
 
     threading.Thread(target=run, name="parent-watch", daemon=True).start()
 
@@ -76,6 +79,13 @@ def main() -> None:
     import faulthandler
 
     faulthandler.enable()
+    import sys
+
+    if sys.argv[1:2] == ["cli"]:
+        # The terminal search (cli.py). The `raven` launcher runs the packaged binary this way.
+        from .cli import main as cli_main
+
+        sys.exit(cli_main(sys.argv[2:]))
     ap = argparse.ArgumentParser(prog="raven-core")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=int(os.environ.get("RAVEN_PORT", "8765")))
@@ -85,8 +95,6 @@ def main() -> None:
     args = ap.parse_args()
     if args.elevated is not None:
         # A packaged Raven runs its elevated helper through itself (fs/elevate.py).
-        import sys
-
         from .fs import elevate_helper
 
         sys.argv = ["elevate_helper", args.elevated]

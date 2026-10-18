@@ -572,6 +572,89 @@ function McpSection() {
   )
 }
 
+type CliFeature = { id: string; name: string; keys: string; text: string }
+type CliStatus = {
+  supported: boolean
+  reason: string | null
+  path: string
+  installed: boolean
+  current: boolean
+  other: boolean
+  on_path: boolean
+  features: CliFeature[]
+  setup: Record<'bash' | 'zsh' | 'fish', string>
+}
+
+/** The `raven` terminal command (core cli.py): what it can do now, its launcher in ~/.local/bin and the line
+ * for the shell rc file. */
+function CliSection() {
+  const [st, setSt] = useState<CliStatus | null>(null)
+  const [shell, setShell] = useState<'bash' | 'zsh' | 'fish'>('bash')
+  useEffect(() => void get<CliStatus>('/cli').then(setSt).catch(() => {}), [])
+  if (!st) return null
+  const act = (path: '/cli/install' | '/cli/remove', done: string): void =>
+    void post<CliStatus>(path, {})
+      .then((r) => (setSt(r), say(done)))
+      .catch((e) => say((e as Error).message, 'error'))
+  const line = st.setup[shell]
+  const rc = shell === 'fish' ? '~/.config/fish/config.fish' : `~/.${shell}rc`
+  return (
+    <Section id="terminal" title="Terminal" text="The raven command brings Raven features to your terminal. It uses the running Raven, or starts the Raven core for the time that it runs.">
+      <Sub title="In the terminal now">
+        <div className="max-w-[720px]">
+          {st.features.map((f) => (
+            <div key={f.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-line/70 py-2">
+              <span className="w-[130px] font-medium">{f.name}</span>
+              <span className="mono text-[11.5px] text-accent">{f.keys}</span>
+              <span className="w-full text-muted">{f.text}</span>
+            </div>
+          ))}
+        </div>
+      </Sub>
+      {!st.supported ? (
+        <p className="text-muted">{st.reason}</p>
+      ) : (
+        <>
+          <Sub title="1. Install the command">
+            <div className="flex max-w-[720px] flex-wrap items-center gap-x-4 gap-y-1">
+              <Chip tone={st.installed ? (st.current ? 'good' : 'warn') : st.other ? 'bad' : 'plain'}>
+                {st.installed ? (st.current ? 'installed' : 'installed, old version') : st.other ? 'another program has this name' : 'not installed'}
+              </Chip>
+              <span className="mono min-w-0 flex-1 truncate text-[11px] text-muted" title={st.path}>
+                {st.path}
+              </span>
+              {(!st.installed || !st.current) && (
+                <Ghost disabled={st.other} onClick={() => act('/cli/install', 'Installed the raven command')}>
+                  {st.installed ? 'Update' : 'Install'}
+                </Ghost>
+              )}
+              {st.installed && (
+                <Ghost tone="plain" onClick={() => act('/cli/remove', 'Removed the raven command')}>
+                  Remove
+                </Ghost>
+              )}
+            </div>
+            {!st.on_path && <p className="mt-2 max-w-[720px] text-[12px] text-muted">The folder ~/.local/bin is not in your PATH, so type the full path to run raven by hand. Ctrl+K and rv work without it.</p>}
+          </Sub>
+          <Sub title="2. Add Ctrl+K to your shell">
+            <div className="mb-2 flex flex-wrap items-center gap-3">
+              <Seg size="sm" options={[['bash', 'bash'], ['zsh', 'zsh'], ['fish', 'fish']]} value={shell} onChange={setShell} />
+              <span className="text-[12px] text-muted">Add this line to {rc}, then open a new terminal.</span>
+            </div>
+            <pre className="selectable max-w-[720px] overflow-x-auto rounded-lg bg-console-bg p-4 font-mono text-[11.5px] text-console-text">{line}</pre>
+            <div className="mt-3">
+              <Ghost onClick={() => void navigator.clipboard.writeText(line).then(() => say('Copied the line'))}>Copy the line</Ghost>
+            </div>
+            <p className="mt-3 max-w-[720px] text-[12px] text-muted">
+              Then press Ctrl+K, or type rv and a query. Enter goes to the folder. In bash, Ctrl+K no longer deletes to the end of the line.
+            </p>
+          </Sub>
+        </>
+      )}
+    </Section>
+  )
+}
+
 type DataInfo = { dir: string; models_dir: string; models_inside: boolean; total: number; parts: { id: string; label: string; bytes: number }[] }
 
 /** Data (PLAN4 section 6 item 7): the data folder, its parts, the index size, the settings export, and "Delete
@@ -884,6 +967,7 @@ export default function SettingsScreen() {
           )}
 
           {here === 'integrations' && <McpSection />}
+          {here === 'integrations' && <CliSection />}
           {here === 'data' && <DataSection />}
           {here === 'updates' && <UpdatesSection on={!!settings.update_check} onChange={(v) => void setSetting('update_check', v)} />}
           {here === 'help' && <HelpSection />}

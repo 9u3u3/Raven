@@ -17,6 +17,8 @@ datas += [("../src/raven_core/third_party.json", "raven_core")]
 # The release notes for Settings, Updates.
 datas += [("../../CHANGELOG.md", "raven_core")]
 hidden += ["psutil", "zstandard"]
+# The terminal search (cli.py) imports curses inside a function.
+hidden += ["curses", "_curses"]
 # The MCP SDK, without its CLI (it needs typer, and Raven does not use it).
 hidden += collect_submodules("mcp", filter=lambda n: not n.startswith("mcp.cli"))
 datas += collect_data_files("mcp")
