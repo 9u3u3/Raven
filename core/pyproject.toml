@@ -3,7 +3,7 @@ name = "raven-core"
 version = "0.3.0-beta.1"
 description = "Raven core: the local sidecar for file, index, AI and privacy work"
 authors = [
-    { name = "HarshF40", email = "harshgaonkar57@gmail.com" }
+    { name = "9u3u3", email = "harshgaonkar57@gmail.com" }
 ]
 requires-python = ">=3.12"
 license = { file = "../LICENSE" }
