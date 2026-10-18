@@ -50,7 +50,8 @@ async function runSteps(scan: Scan, steps: ReviewStep[], after: () => void): Pro
   try {
     const r = await post<RunResult>('/space/reclaim/run', { id: scan.id, rows })
     useApp.setState({ journal: r.journal })
-    const parts = [r.freed > 0 && `freed ${size(r.freed)}`, r.in_trash > 0 && `${size(r.in_trash)} in the trash`].filter(Boolean).join(', ')
+    // The Trash is on the same disk: trashed items free no space until the Trash is empty.
+    const parts = [r.freed > 0 && `freed ${size(r.freed)}`, r.in_trash > 0 && `moved ${size(r.in_trash)} to the Trash. Empty the Trash to free that space`].filter(Boolean).join(', ')
     if (r.errors.length) say(`${parts || 'Done'}. ${r.errors[0]}`, 'error', { undo: r.in_trash > 0 })
     else say(`Done: ${parts || r.label}`, 'info', { undo: r.in_trash > 0 })
   } catch (e) {

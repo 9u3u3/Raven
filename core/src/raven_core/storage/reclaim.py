@@ -619,7 +619,10 @@ def _junk_rows(root: str) -> list[dict]:
     for r in rows:
         if r.get("action") != "trash" or not r.get("items"):
             continue
-        items = [{"path": i["path"], "size": i["size"], "checked": i["checked"], "note": i.get("note", ""), "is_dir": i.get("is_dir")}
+        # An unchecked junk item belongs to a project changed in the last 30 days (scan.py). plan() never picks it.
+        junk = r["id"].startswith("junk:")
+        items = [{"path": i["path"], "size": i["size"], "checked": i["checked"], "note": i.get("note", ""), "is_dir": i.get("is_dir"),
+                  **({"active": True} if junk and not i["checked"] else {})}
                  for i in r["items"]]
         out.append(_row(r["id"], "Junk" if r["id"].startswith("junk:") else "Duplicates", r["sentence"], items,
                         "safe" if r["id"].startswith("junk:") else "check", "trash", True))
@@ -696,7 +699,8 @@ def scan(root: str | None = None) -> dict:
 
 def plan(target: int, scan_id: str | None = None) -> dict:
     """The safest set of items that frees at least `target` bytes: safe rows first, then check rows,
-    reversible before permanent, larger items first. Blocked items (an open browser) never count."""
+    reversible before permanent, larger items first. Blocked items (an open browser) and the junk of a project
+    changed in the last 30 days never count."""
     with _lock:
         if scan_id and scan_id != _last["id"]:
             raise ValueError("The scan changed. Scan again.")
@@ -712,7 +716,7 @@ def plan(target: int, scan_id: str | None = None) -> dict:
         for i in sorted(r["items"], key=lambda i: -i["size"]):
             if got >= target:
                 break
-            if i.get("blocked") or i["size"] <= 0:
+            if i.get("blocked") or i.get("active") or i["size"] <= 0:
                 continue
             picked.setdefault(r["id"], []).append(i["path"])
             got += i["size"]
@@ -755,6 +759,7 @@ def run(scan_id: str, selection: dict[str, list[str]]) -> dict:
     disk_before = shutil.disk_usage(_last["path"] or HOME).free
     g = ops.Group("reclaim", "Free space")
     results, errors = [], []
+    removed: list[tuple[str, int]] = []
     to_trash_bytes = 0
     try:
         for rid, paths in selection.items():
@@ -776,6 +781,7 @@ def run(scan_id: str, selection: dict[str, list[str]]) -> dict:
                         if os.path.lexists(p):
                             ops.trash([p], source="reclaim", group=g)
                             to_trash_bytes += it["size"]
+                        removed.append((p, it["size"]))
                     elif r["action"] == "delete":
                         ok = bool(it.get("cmd")) and _run_cmd(it["cmd"], False)[0]
                         if not ok and os.path.isdir(p):
@@ -790,6 +796,7 @@ def run(scan_id: str, selection: dict[str, list[str]]) -> dict:
                                 os.unlink(it["info"])
                             except OSError:
                                 pass
+                        removed.append((p, it["size"]))
                     elif r["action"] == "optimize":
                         saved = optimize_one(p, g)
                         if saved is None:
@@ -808,6 +815,13 @@ def run(scan_id: str, selection: dict[str, list[str]]) -> dict:
                     errors.append(f"{os.path.basename(p)}: {e}")
     finally:
         g.commit()
+        if removed:
+            # Without this, the next scan reads the cached space scan and shows the removed items again.
+            from .dupes import job as dupe_job
+            from .scan import store
+
+            store.forget(removed)
+            dupe_job.forget({p for p, _ in removed})
     freed = max(0, shutil.disk_usage(_last["path"] or HOME).free - disk_before)
     events.publish("space_changed", path=_last["path"])
     return {"done": len(results), "errors": errors, "freed": freed, "in_trash": to_trash_bytes, "journal": ops.peek(),

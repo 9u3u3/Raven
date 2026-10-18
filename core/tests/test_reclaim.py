@@ -197,3 +197,34 @@ def test_trim_thumbs_keeps_frames(tmp_path, monkeypatch):
     assert reclaim.trim_thumbs(limit=250) == 3
     assert sorted(p.name for p in tmp_path.glob("*.webp")) == ["t3.webp", "t4.webp"]
     assert (tmp_path / "frames" / "f.webp").exists()
+
+
+def test_plan_skips_the_junk_of_active_projects():
+    reclaim._last.update(id="s3", path="/", rows={
+        "junk:node_modules": {"id": "junk:node_modules", "safety": "safe", "reversible": True, "action": "trash", "total": 300,
+                              "items": [{"path": "/old/node_modules", "size": 100, "checked": True},
+                                        {"path": "/new/node_modules", "size": 200, "checked": False, "active": True}]}})
+    p = reclaim.plan(10_000, "s3")
+    assert p["rows"] == {"junk:node_modules": ["/old/node_modules"]} and not p["enough"]
+
+
+def test_run_takes_trashed_junk_out_of_the_space_scan(tmp_path):
+    from raven_core.storage.scan import Scanner, store
+    from raven_core.storage.suggest import suggestions
+
+    proj = tmp_path / "proj"
+    _blob(proj / "node_modules" / "pkg" / "index.js", 4096)
+    (proj / "package.json").write_text("{}")
+    old = 1_600_000_000
+    for p in (proj / "node_modules" / "pkg" / "index.js", proj / "node_modules" / "pkg", proj / "node_modules", proj / "package.json", proj):
+        os.utime(p, (old, old))
+    store.results[str(tmp_path)] = Scanner(str(tmp_path)).run()
+    rows = reclaim._junk_rows(str(tmp_path))
+    nm = str(proj / "node_modules")
+    assert any(i["path"] == nm for r in rows for i in r["items"])
+    reclaim._last.update(id="s4", path=str(tmp_path), rows={r["id"]: r for r in rows})
+    rid = next(r["id"] for r in rows if any(i["path"] == nm for i in r["items"]))
+    res = reclaim.run("s4", {rid: [nm]})
+    assert res["done"] == 1 and not os.path.exists(nm)
+    assert not any(i["path"] == nm for r in suggestions(str(tmp_path)) for i in r["items"])
+    store.results.pop(str(tmp_path), None)
