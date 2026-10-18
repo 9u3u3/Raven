@@ -328,7 +328,7 @@ function FeaturesSection() {
 type Notice = { name: string; version?: string; license: string; source?: string; notice?: string }
 type About = { version: string; dev: boolean; notices: { models: Notice[]; programs: Notice[]; python: Notice[]; node: Notice[] } }
 
-const ISSUES = 'https://github.com/9u3u3/Raven/issues/new'
+const ISSUES = 'https://github.com/9u3u3/ravenfiles/issues/new'
 
 /** A new GitHub issue with the version and a short form. The diagnostics stay out unless the user pastes them. */
 function issueUrl(version: string): string {

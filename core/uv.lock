@@ -2386,7 +2386,7 @@ wheels = [
 
 [[package]]
 name = "raven-core"
-version = "0.3.0"
+version = "0.3.0b1"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },

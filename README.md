@@ -2,7 +2,7 @@
 
 **A desktop file manager that finds, organizes and shrinks your files with AI. Your private data never leaves your laptop unredacted.**
 
-![Electron](https://img.shields.io/badge/Electron-44-47848F) ![React](https://img.shields.io/badge/React-19-61DAFB) ![Python](https://img.shields.io/badge/Python-3.12-3776AB) ![FastAPI](https://img.shields.io/badge/FastAPI-sidecar-009688) ![Ollama](https://img.shields.io/badge/Ollama-local%20LLM-000000) ![Platform](https://img.shields.io/badge/platform-Linux-informational)
+![Electron](https://img.shields.io/badge/Electron-44-47848F) ![React](https://img.shields.io/badge/React-19-61DAFB) ![Python](https://img.shields.io/badge/Python-3.12-3776AB) ![FastAPI](https://img.shields.io/badge/FastAPI-sidecar-009688) ![Ollama](https://img.shields.io/badge/Ollama-local%20LLM-000000) ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-informational)
 
 ![Raven](docs/we-solved-the-file-explorer.png)
 
@@ -10,7 +10,13 @@ Raven is a desktop file manager (Electron and React) with a local Python sidecar
 choose, and then it can find a file by its name, its words, its meaning or its appearance. It answers questions with
 citations, runs file commands that you review first, and shows where your disk space goes. Each change has one undo.
 
-## Quick start
+## Download (beta)
+
+The beta builds for Linux (AppImage) and Windows (installer) are in
+[9u3u3/ravenfiles](https://github.com/9u3u3/ravenfiles/releases/latest). Report problems in
+[its issues](https://github.com/9u3u3/ravenfiles/issues). Its `BETA-LICENSE.md` says how you can use the beta.
+
+## Quick start (development)
 
 You need these tools:
 

@@ -28,7 +28,7 @@ server = MCPServer(
         "that the user indexed. Results are redacted: placeholders such as [PERSON_1] replace private values. "
         "Paths start with ~ (the home folder). Raven tools only read; to change files, tell the user what to do in Raven."
     ),
-    version="0.3.0",
+    version="0.3.0-beta.1",
 )
 
 

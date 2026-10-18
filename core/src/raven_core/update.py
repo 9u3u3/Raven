@@ -13,13 +13,18 @@ import time
 from . import db
 from .config import VERSION
 
-URL = os.environ.get("RAVEN_UPDATE_URL", "https://api.github.com/repos/9u3u3/Raven/releases/latest")
+URL = os.environ.get("RAVEN_UPDATE_URL", "https://api.github.com/repos/9u3u3/ravenfiles/releases/latest")
 EVERY = 24 * 3600
 
 
 def _parse(v: str) -> tuple[int, ...]:
-    m = re.match(r"v?(\d+(?:\.\d+)*)", v.strip())
-    return tuple(int(x) for x in m.group(1).split(".")) if m else ()
+    """MAJOR.MINOR.PATCH, then 0 and N for a "-beta.N" build or 1 and 0 for the final build, so 0.3.0 > 0.3.0-beta.2."""
+    m = re.match(r"v?(\d+(?:\.\d+)*)(?:-beta\.?(\d+))?", v.strip())
+    if not m:
+        return ()
+    nums = [int(x) for x in m.group(1).split(".")][:3]
+    nums += [0] * (3 - len(nums))
+    return (*nums, 0, int(m.group(2))) if m.group(2) else (*nums, 1, 0)
 
 
 def newer(latest: str, current: str = VERSION) -> bool:

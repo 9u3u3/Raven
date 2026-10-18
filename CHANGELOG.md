@@ -5,9 +5,10 @@ A PATCH step only fixes problems. A beta build adds `-beta.N` (for example `0.3.
 `core/src/raven_core/config.py`, `core/pyproject.toml` and `app/package.json` hold the same version.
 `tests/test_release_build.py` checks this.
 
-## 0.3.0 (not released yet)
+## 0.3.0-beta.1 (2026-10-18)
 
-The first build for early users, on Linux and Windows.
+The first build for early users, on Linux and Windows. The builds and the issues are in
+https://github.com/9u3u3/ravenfiles. BETA-LICENSE.md in that repo says how you can use this beta.
 
 ### New
 
@@ -28,6 +29,9 @@ The first build for early users, on Linux and Windows.
 - Settings, Help: "Copy diagnostics", the log folder, the third-party notices, "Report a problem", and the
   text "What Raven sends".
 - The guide ("?") has a short help page for each screen.
+- Welcome cards at the first start: what Raven does, and what stays on this computer. Settings, Help shows them
+  again.
+- Settings shows one page at a time. Each description stays hidden until you open it.
 
 ### Changed
 

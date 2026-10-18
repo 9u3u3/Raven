@@ -58,3 +58,8 @@ def test_version_order():
     assert update.newer("v0.10.0", "0.9.9")
     assert not update.newer("v0.2.0", "0.2.0")
     assert not update.newer("nightly", "0.2.0")
+    # A beta comes before its final build, and a later beta is newer.
+    assert update.newer("v0.3.0", "0.3.0-beta.1")
+    assert update.newer("v0.3.0-beta.2", "0.3.0-beta.1")
+    assert not update.newer("v0.3.0-beta.1", "0.3.0-beta.1")
+    assert not update.newer("v0.3.0-beta.1", "0.3.0")
