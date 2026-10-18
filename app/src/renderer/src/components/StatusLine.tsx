@@ -40,7 +40,7 @@ export function indexText(i: ReturnType<typeof useApp.getState>['index']): strin
     return `indexing meaning ${pct}%`
   }
   // The last stage: images, PDF pages and video frames for search by appearance.
-  if ((i.visual_pending ?? 0) > 0) return `indexing images · ${i.visual_pending!.toLocaleString()} left`
+  if ((i.visual_pending ?? 0) > 0 && !i.visual_off) return `indexing images · ${i.visual_pending!.toLocaleString()} left`
   return `Indexed ${i.files.toLocaleString()} files`
 }
 
@@ -61,7 +61,7 @@ export default function StatusLine() {
   return (
     <footer data-tour="status" className="mono flex h-8 shrink-0 items-center gap-3 overflow-hidden whitespace-nowrap border-t border-line px-6 pr-16 text-[11px] text-muted">
       <span className={`flex items-center gap-1.5 ${index?.embed_error ? 'text-danger' : ''}`} title={index?.embed_error ?? ''}>
-        <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${index?.embed_error ? 'bg-danger' : index && (index.text_pending > 0 || index.embed_pending > 0 || (index.visual_pending ?? 0) > 0 || index.stage === 'metadata') ? 'anim-breathe bg-accent' : 'bg-ok'}`} />
+        <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${index?.embed_error ? 'bg-danger' : index && (index.text_pending > 0 || index.embed_pending > 0 || ((index.visual_pending ?? 0) > 0 && !index.visual_off) || index.stage === 'metadata') ? 'anim-breathe bg-accent' : 'bg-ok'}`} />
         {index ? <IndexMeter index={index} error={index.embed_error} /> : indexText(index)}
       </span>
       {noRoots && (

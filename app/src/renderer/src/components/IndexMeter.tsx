@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { IndexProgress } from '../lib/types'
 import { setScreen } from '../store'
 
-type Stage = { key: string; label: string; what: string; done: number; total: number | null; left: number; rate: number }
+type Stage = { key: string; label: string; what: string; done: number; total: number | null; left: number; rate: number; off?: string | null }
 
 // Typical speeds on this kind of laptop (items per second), for stages that have no measured speed yet.
 // Images: SigLIP 2 on the CPU reads several photos a second. The stage waits for text and meaning, so its own
@@ -23,10 +23,13 @@ function stagesOf(i: IndexProgress): Omit<Stage, 'rate'>[] {
   return [
     { key: 'text', label: 'Text', what: 'reads documents, OCR for scans', done: i.files - i.text_pending, total: i.files, left: i.text_pending },
     { key: 'meaning', label: 'Meaning', what: 'embeddings for search by meaning and Ask', done: i.chunks - i.embed_pending, total: i.chunks, left: i.embed_pending },
-    { key: 'images', label: 'Images', what: 'photos, PDF pages and video frames', done: Math.max(0, vt - vp), total: vt, left: vp },
-    { key: 'speech', label: 'Speech', what: 'transcripts of audio and video', done: 0, total: null, left: i.speech_pending ?? 0 }
+    { key: 'images', label: 'Images', what: 'photos, PDF pages and video frames', done: Math.max(0, vt - vp), total: vt, left: vp, off: i.visual_off },
+    { key: 'speech', label: 'Speech', what: 'transcripts of audio and video', done: 0, total: null, left: i.speech_pending ?? 0, off: i.speech_off }
   ]
 }
+
+/** The items that a stage still works on. A stage that does not run (no model, off) adds no time. */
+const todo = (s: Omit<Stage, 'rate'>): number => (s.off ? 0 : s.left)
 
 export function minutes(s: number): string {
   if (!isFinite(s) || s <= 0) return ''
@@ -84,7 +87,7 @@ export default function IndexMeter({ index, error }: { index: IndexProgress; err
 
   const measured = rates(samples.current)
   const stages: Stage[] = raw.map((s) => ({ ...s, rate: measured[s.key] ?? DEFAULT_RATE[s.key] }))
-  const busy = listing || stages.some((s) => s.left > 0)
+  const busy = listing || stages.some((s) => todo(s) > 0)
   // Listing: compare with the number of files of the last list. It is a guess when folders changed a lot.
   const listTotal = Math.max(index.files, index.scanned)
   const listLeft = Math.max(0, listTotal - index.scanned)
@@ -93,9 +96,12 @@ export default function IndexMeter({ index, error }: { index: IndexProgress; err
   // Files still waiting for text become chunks later. The sidecar measures chunks per read file; before it
   // has enough files, use 2 (most files in a home folder are short).
   const meaningLeft = stages[1].left + stages[0].left * (index.chunks_per_file ?? 2)
-  const etaSec = stages[0].left / stages[0].rate + meaningLeft / stages[1].rate + stages[2].left / stages[2].rate + stages[3].left / stages[3].rate
+  const etaSec = stages[0].left / stages[0].rate + meaningLeft / stages[1].rate + todo(stages[2]) / stages[2].rate + todo(stages[3]) / stages[3].rate
   const frac = (s: Stage): number => (s.total ? Math.min(1, s.done / Math.max(1, s.total)) : s.left ? 0 : 1)
-  const pct = listing ? 0 : Math.floor(stages.reduce((a, s) => a + WEIGHT[s.key] * frac(s), 0) * 100)
+  // A stage that does not run leaves the percent, so the bar can reach 100.
+  const live = stages.filter((s) => !s.off)
+  const weight = live.reduce((a, s) => a + WEIGHT[s.key], 0) || 1
+  const pct = listing ? 0 : Math.floor((live.reduce((a, s) => a + WEIGHT[s.key] * frac(s), 0) / weight) * 100)
 
   const label = !index.roots.length
     ? 'No folders are indexed'
@@ -145,21 +151,25 @@ export default function IndexMeter({ index, error }: { index: IndexProgress; err
               const eta = s.left / s.rate
               return (
                 <span key={s.key} className="contents">
-                  <span className={s.left ? '' : 'text-muted'}>{s.label}</span>
+                  <span className={todo(s) ? '' : 'text-muted'}>{s.label}</span>
                   <span className="min-w-0">
                     <span className="relative mb-0.5 block h-[3px] w-full overflow-hidden rounded-full bg-line">
                       <span className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${Math.floor(f * 100)}%` }} />
                     </span>
-                    <span className="block truncate text-[11px] text-muted">{s.what}</span>
+                    <span className="block truncate text-[11px] text-muted" title={s.off ?? undefined}>
+                      {s.off && s.left ? `not running: ${s.off}` : s.what}
+                    </span>
                   </span>
-                  <span className={`text-right ${s.left ? '' : 'text-accent'}`}>
+                  <span className={`text-right ${s.off && s.left ? 'text-muted' : s.left ? '' : 'text-accent'}`}>
                     {listing
                       ? 'waits for the list'
-                      : s.left
-                        ? `${s.left.toLocaleString()} left${eta > 0 ? ` · ${minutes(eta)}` : ''}`
-                        : s.total || s.key === 'speech'
-                          ? 'done'
-                          : '—'}
+                      : s.off && s.left
+                        ? `${s.left.toLocaleString()} wait`
+                        : s.left
+                          ? `${s.left.toLocaleString()} left${eta > 0 ? ` · ${minutes(eta)}` : ''}`
+                          : s.total || s.key === 'speech'
+                            ? 'done'
+                            : '—'}
                   </span>
                 </span>
               )

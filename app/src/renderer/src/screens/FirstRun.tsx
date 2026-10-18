@@ -126,7 +126,7 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
   if (phase === 'ready') {
     const pending = modelRows.filter((f) => f.state === 'downloading' || f.state === 'missing' || f.state === 'needs_ollama')
     const failed = modelRows.filter((f) => f.state === 'error')
-    const indexDone = !!index && index.roots.length > 0 && index.text_pending === 0 && index.embed_pending === 0 && !(index.visual_pending ?? 0) && index.stage !== 'metadata'
+    const indexDone = !!index && index.roots.length > 0 && index.text_pending === 0 && index.embed_pending === 0 && (!(index.visual_pending ?? 0) || !!index.visual_off) && index.stage !== 'metadata'
     const row = (label: string, ok: boolean | null, text: string, k: number, bar?: number) => (
       <div key={label} style={stagger(k)} className="anim-row grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-3 border-b border-line/70 py-3">
         <span className={`serif text-[14px]  leading-none ${ok ? 'text-ok' : ok === false ? 'text-danger' : 'anim-breathe text-muted'}`}>{ok ? '✓' : ok === false ? '!' : '·'}</span>

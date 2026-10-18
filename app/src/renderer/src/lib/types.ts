@@ -71,6 +71,9 @@ export type IndexProgress = {
   visual_total?: number
   visual_current?: string | null
   speech_pending?: number
+  /** Why the image or speech stage does not run (no model, off, on battery), or null when it runs. */
+  visual_off?: string | null
+  speech_off?: string | null
   roots: string[]
   chunks_per_file?: number | null
 }

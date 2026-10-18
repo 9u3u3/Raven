@@ -110,3 +110,20 @@ def test_unload_when_idle():
     unload_when_idle(m, "test", idle=0.2)
     time.sleep(0.6)
     assert m._sess is None
+
+
+def test_media_off_says_why(monkeypatch):
+    """A stage that cannot run says why, so the index meter gives it no time (a missing model left "18 left")."""
+    from raven_core.index import indexer
+    from raven_core.media import siglip, transcribe
+
+    monkeypatch.setattr(siglip, "available", lambda: False)
+    monkeypatch.setattr(transcribe, "available", lambda: True)
+    monkeypatch.setattr(lite, "paused", lambda: False)
+    db.set_setting("features", {"image": True, "speech": True})
+    assert indexer._media_off() == {"image": "the image model is not installed", "speech": None}
+    db.set_setting("features", {"image": False, "speech": True})
+    assert indexer._media_off()["image"] == "off in Settings"
+    monkeypatch.setattr(lite, "paused", lambda: True)
+    assert indexer._media_off()["speech"] == "paused on battery"
+    db.set_setting("features", None)

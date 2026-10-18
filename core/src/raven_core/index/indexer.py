@@ -270,6 +270,24 @@ def _like_prefix(p: str) -> str:
     return like_below(p)
 
 
+def _media_off() -> dict[str, str | None]:
+    """The reason that the image and the speech stages do not run, or None for a stage that runs."""
+    from .. import lite
+    from ..media import siglip, transcribe
+
+    out: dict[str, str | None] = {}
+    for feat, ok, model in (("image", siglip.available(), "image model"), ("speech", transcribe.available(), "speech model or ffmpeg")):
+        if not lite.enabled(feat):
+            out[feat] = "off in Settings"
+        elif not ok:
+            out[feat] = f"the {model} is not installed"
+        elif lite.paused():
+            out[feat] = "paused on battery"
+        else:
+            out[feat] = None
+    return out
+
+
 class Indexer:
     def __init__(self) -> None:
         self.stop = threading.Event()
@@ -787,7 +805,7 @@ class Indexer:
             exts = ",".join(f"'{e}'" for e in sorted(TEXT_EXTS | DOC_EXTS | OCR_EXTS))
             read = c.execute(f"SELECT COUNT(*) FROM files WHERE is_dir=0 AND light=0 AND index_stage=2 AND ext IN ({exts})").fetchone()[0]
             per_file = round(ctotal / read, 2) if read >= 50 else None
-            extra = self._extra = (now, vtotal, vpend, speech, per_file)
+            extra = self._extra = (now, vtotal, vpend, speech, per_file, _media_off())
         if stage == "idle":
             if text_pending:
                 stage = "text"
@@ -810,6 +828,9 @@ class Indexer:
             "visual_current": vis.get("current"),
             "speech_pending": extra[3],
             "chunks_per_file": extra[4],
+            # Why the image or speech stage does not run, if it does not: its files wait, but no time goes on them.
+            "visual_off": extra[5]["image"],
+            "speech_off": extra[5]["speech"],
             "roots": roots(),
         }
         self._last_full = out
