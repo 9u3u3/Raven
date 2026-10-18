@@ -71,12 +71,16 @@ def list_dir(path: str, hidden: bool = True) -> dict:
 
     # Reading file heads costs a round trip per file on a share. Sniff on local disks only.
     local = not is_network(str(p))
+    # The user put every item in a trash folder, so the trash shows dot names (.venv) too.
+    trash = p.name == "files" and (p.parent.name == "Trash" or p.parent.name.startswith(".Trash-")) and (p.parent / "info").is_dir()
     with os.scandir(p) as it:
         for de in it:
-            if not hidden and de.name.startswith("."):
+            if not hidden and not trash and de.name.startswith("."):
                 continue
             e = entry(de.path, de.name, sniff=local)
             if e:
+                if trash:
+                    e["is_hidden"] = False
                 out.append(e)
     # Item counts for folders cost one scandir each. Skip them for very large folders.
     if len(out) <= 2000:

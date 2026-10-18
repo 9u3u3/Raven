@@ -150,3 +150,18 @@ def test_delete_stops_at_the_first_error(tmp_path):
     with pytest.raises(OSError):
         ops.delete([str(tmp_path / "missing.txt")] + [str(ok)])
     assert ok.exists()  # the items after the error stay
+
+
+def test_trash_listing_shows_dot_names(tmp_path):
+    from raven_core.fs import listing
+
+    files = tmp_path / "Trash" / "files"
+    files.mkdir(parents=True)
+    (tmp_path / "Trash" / "info").mkdir()
+    (files / ".venv").mkdir()
+    res = listing.list_dir(str(files), hidden=False)
+    assert [(e["name"], e["is_hidden"]) for e in res["entries"]] == [(".venv", False)]
+    other = tmp_path / "proj"
+    (other / ".venv").mkdir(parents=True)
+    assert listing.list_dir(str(other), hidden=False)["entries"] == []
+    assert listing.list_dir(str(other))["entries"][0]["is_hidden"]
