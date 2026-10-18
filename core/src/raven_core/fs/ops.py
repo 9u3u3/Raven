@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -372,6 +373,19 @@ def restore(paths: Iterable[str], source: str = "manual") -> list[str]:
     return out
 
 
+def _rmtree(path: Path) -> None:
+    """Delete a folder tree. On POSIX, rm runs in its own process: shutil.rmtree in a sidecar thread waits for
+    the GIL behind the busy index and scan threads (3.5 times slower in a test next to 4 busy threads)."""
+    rm = shutil.which("rm") if os.name != "nt" else None
+    if not rm:
+        shutil.rmtree(path)
+        return
+    r = subprocess.run([rm, "-rf", "--", str(path)], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    if r.returncode != 0 or path.exists():
+        msg = (r.stderr or "").strip().splitlines()[:1]
+        raise OSError(msg[0] if msg else f"Could not delete {path}")
+
+
 def delete(paths: Iterable[str], source: str = "manual", progress=None) -> int:
     """Delete permanently. progress(done, total, path) runs after each item."""
     paths = list(paths)
@@ -380,7 +394,7 @@ def delete(paths: Iterable[str], source: str = "manual", progress=None) -> int:
         for p in paths:
             pp = Path(p)
             if pp.is_dir() and not pp.is_symlink():
-                shutil.rmtree(pp)
+                _rmtree(pp)
             else:
                 pp.unlink()
             # An item deleted from a trash folder: remove its .trashinfo too, or the trash keeps a stale entry.

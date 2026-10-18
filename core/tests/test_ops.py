@@ -165,3 +165,19 @@ def test_trash_listing_shows_dot_names(tmp_path):
     (other / ".venv").mkdir(parents=True)
     assert listing.list_dir(str(other), hidden=False)["entries"] == []
     assert listing.list_dir(str(other))["entries"][0]["is_hidden"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions")
+def test_delete_reports_a_folder_that_rm_cannot_remove(tmp_path):
+    locked = tmp_path / "locked"
+    (locked / "inner").mkdir(parents=True)
+    (locked / "inner" / "f.txt").write_text("x")
+    os.chmod(locked / "inner", 0o500)
+    try:
+        if os.geteuid() == 0:
+            pytest.skip("root can delete anything")
+        with pytest.raises(OSError):
+            ops.delete([str(locked)])
+        assert (locked / "inner" / "f.txt").exists()
+    finally:
+        os.chmod(locked / "inner", 0o700)
