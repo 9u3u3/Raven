@@ -133,10 +133,14 @@ export type SpaceNode = {
 
 export type SpaceStatus = {
   scanning: boolean
+  /** A refresh of a saved scan: only changed folders are read again. */
+  refreshing?: boolean
+  /** The saved scans still load at start. */
+  loading?: boolean
   path: string | null
   files: number
   bytes: number
-  roots: { path: string; size: number; files: number; finished: number; seconds: number }[]
+  roots: { path: string; size: number; files: number; finished: number; seconds: number; refreshed?: boolean; full?: number }[]
   error: string | null
   dupes: DupeStatus
 }

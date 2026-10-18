@@ -88,9 +88,10 @@ export async function showInSpace(path: string): Promise<void> {
   else await scan(path)
 }
 
-async function scan(path: string): Promise<void> {
+/** Scan a folder. A saved scan of it gets a refresh (only changed folders). `full` walks the whole tree. */
+async function scan(path: string, full = false): Promise<void> {
   try {
-    await post('/space/scan', { path })
+    await post('/space/scan', { path, full })
     setS({ path })
     void loadStatus()
   } catch (e) {
@@ -149,15 +150,18 @@ function ScanState({ status, scanned, home, error }: { status: SpaceStatus | nul
         <span className="relative h-[2px] w-16 overflow-hidden bg-line">
           <span className="absolute inset-y-0 w-1/3 bg-accent" style={{ animation: 'rv-scan 1s ease-in-out infinite' }} />
         </span>
-        <span className="mono">{status.files.toLocaleString()} files</span>
+        <span className="mono">{status.refreshing ? 'checking for changes · ' : ''}{status.files.toLocaleString()} files</span>
       </span>
     )
+  if (status?.loading) return <span className="text-[12px] text-muted">Loading the last scan…</span>
   if (!scanned) return <Ghost onClick={() => void scan(home)}>Scan the home folder</Ghost>
+  const how = scanned.refreshed ? `changed folders checked in ${scanned.seconds.toFixed(0)} s` : `full scan in ${scanned.seconds.toFixed(0)} s`
+  const full = scanned.full && scanned.full !== scanned.finished ? ` · last full scan ${date(scanned.full)}` : ''
   return (
-    <span className="flex items-center gap-2 text-[12px] text-muted" title={`${tildify(scanned.path, home)} · ${scanned.files.toLocaleString()} files in ${scanned.seconds.toFixed(0)} s`}>
+    <span className="flex items-center gap-2 text-[12px] text-muted" title={`${tildify(scanned.path, home)} · ${scanned.files.toLocaleString()} files · ${how}${full}`}>
       <span className="h-[6px] w-[6px] bg-ok" />
-      {date(scanned.finished)}
-      <button className="icon-btn !h-7 !w-7" title="Rescan" aria-label="Rescan" onClick={() => void scan(scanned.path)}>
+      Scanned {date(scanned.finished)}
+      <button className="icon-btn !h-7 !w-7" title="Scan all files again" aria-label="Scan all files again" onClick={() => void scan(scanned.path, true)}>
         <RefreshCw size={13} strokeWidth={1.6} />
       </button>
     </span>

@@ -111,6 +111,11 @@ def _start_services(background: bool = True) -> None:
 
     keys.migrate()
     from .compress import auto  # noqa: F401  (import now, not in a busy process later)
+    from .storage.scan import store as space_store
+
+    # The saved Space scans: Space opens with them and refreshes only changed folders (storage/scan.py).
+    space_store.loaded.clear()
+    threading.Thread(target=space_store.load_saved, name="space-load", daemon=True).start()
 
     if background:
         _start_background()

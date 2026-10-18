@@ -53,6 +53,9 @@ PACKAGE_CACHES = {".cache/pip", ".npm/_cacache", ".cache/yarn", ".cache/pnpm", "
                   ".cache/go-build", ".gradle/caches", ".cache/thumbnails"}
 INSTALLER_EXTS = {"appimage", "deb", "rpm", "exe", "msi", "dmg", "pkg"}
 DAY = 86400
+# The entry names that _dir_junk and the project rule read. A refresh keeps them for a folder that it does not read.
+MARK_NAMES = frozenset(protect.PROJECT_MARKERS) | {"package.json", "setup.py", "pyproject.toml", "CMakeLists.txt",
+                                                 "Makefile", "Cargo.toml"}
 
 TOP_FILES_PER_DIR = 12
 TOP_FILES_GLOBAL = 600
@@ -72,6 +75,10 @@ class Node:
     children: list = field(default_factory=list)
     top: list = field(default_factory=list)  # min-heap of (size, name, mtime, atime, cat)
     unreadable: bool = False
+    # A refresh (Scanner(root, base=...)) reads a folder again only when its change time (ns) differs.
+    stamp: int = 0
+    # The names next to the folder's entries that the junk and project rules read (MARK_NAMES).
+    marks: frozenset = frozenset()
 
 
 @dataclass
@@ -94,6 +101,8 @@ class ScanResult:
     largest: list  # [(size, path, mtime, atime, cat)] largest first
     junk: list[JunkItem]
     dev: int
+    refreshed: bool = False  # a refresh of the base scan, not a full walk
+    full: float = 0.0  # the end of the last full walk (a refresh keeps it)
 
 
 def _age_bucket(now: float, atime: int, mtime: int) -> int:
@@ -115,8 +124,15 @@ def _file_cat(ext: str, inherited: int | None) -> int:
 
 
 class Scanner:
-    def __init__(self, root: str) -> None:
+    """A full walk, or with `base` (the last scan of the same root) a refresh: a folder whose change time is the
+    same keeps its own files from the base, and only changed folders are read again. A file that grows in
+    place does not change its folder's time, so a refresh misses it. A full scan finds it."""
+
+    def __init__(self, root: str, base: ScanResult | None = None) -> None:
         self.root = os.path.abspath(root)
+        self.base = base
+        self._kept: set[str] = set()  # folders whose own files came from the base
+        self._kept_trees: set[str] = set()  # totals-only folders (deep in dependencies) taken whole from the base
         self.now = time.time()
         self.count = 0
         self.bytes = 0
@@ -130,13 +146,15 @@ class Scanner:
     # ------------------------------------------------------------ walk
 
     def _walk(self, path: str, name: str, dev: int, inherited: int | None, depth: int, pools: list[ThreadPoolExecutor],
-              hidden: bool = False, inner: int = 0, proj: bool = False) -> Node:
+              hidden: bool = False, inner: int = 0, proj: bool = False, old: Node | None = None) -> Node:
         """Walk one folder. `hidden`: a folder above this one starts with a dot.
-        `inner`: how deep this folder is inside a code-dependency or cache folder."""
+        `inner`: how deep this folder is inside a code-dependency or cache folder.
+        `old`: this folder in the base scan. Its subfolders are refreshed (_diff), not walked again."""
         node = Node(name=name, path=path)
         try:
             st = os.lstat(path)
             node.mtime = int(st.st_mtime)
+            node.stamp = st.st_mtime_ns
             it = os.scandir(path)
         except OSError:
             node.unreadable = True
@@ -191,21 +209,26 @@ class Scanner:
                     elif size > node.top[0][0]:
                         heapq.heapreplace(node.top, item)
                 self._file_seen(de.path, de.name, ext, size, mtime, atime, cat, path, safe_zone)
+        node.marks = frozenset(sibling_names & MARK_NAMES)
         # Inside a project or a software folder, the empty-folder rule does not apply.
         here_proj = proj or bool(sibling_names & protect.PROJECT_MARKERS) or name in protect.TOOL_NAMES
         if subdirs:
+            prev = {c.name: c for c in old.children} if old else {}
             # Each of the first levels has its own pool. A task waits only on tasks of a deeper
             # pool, so the pools cannot deadlock.
             jobs = []
             for sp, sn, sc in subdirs:
                 ch_hidden = hidden or sn.startswith(".")
                 ch_inner = inner + 1 if sc is not None else 0
+                args = (sp, sn, prev.get(sn), dev, sc, depth + 1, pools, ch_hidden, ch_inner, here_proj)
                 if depth < len(pools):
-                    jobs.append(pools[depth].submit(self._walk, sp, sn, dev, sc, depth + 1, pools, ch_hidden, ch_inner, here_proj))
+                    jobs.append(pools[depth].submit(self._sub, *args))
                 else:
-                    jobs.append(self._walk(sp, sn, dev, sc, depth + 1, pools, ch_hidden, ch_inner, here_proj))
+                    jobs.append(self._sub(*args))
             for j in jobs:
-                child = j if isinstance(j, Node) else j.result()
+                child = j if isinstance(j, Node) or j is None else j.result()
+                if child is None:
+                    continue
                 node.size += child.size
                 node.files += child.files
                 node.dirs += 1 + child.dirs
@@ -218,6 +241,85 @@ class Scanner:
                     continue  # totals only, as above
                 node.children.append(child)
         return node
+
+    def _sub(self, path: str, name: str, old: Node | None, dev: int, inherited: int | None, depth: int,
+             pools: list[ThreadPoolExecutor], hidden: bool, inner: int, proj: bool) -> Node | None:
+        if old is None:
+            return self._walk(path, name, dev, inherited, depth, pools, hidden, inner, proj)
+        return self._diff(old, dev, inherited, depth, pools, hidden, inner, proj)
+
+    def _diff(self, old: Node, dev: int, inherited: int | None, depth: int, pools: list[ThreadPoolExecutor],
+              hidden: bool, inner: int, proj: bool) -> Node | None:
+        """Refresh one folder of the base scan. Same change time: keep its own files and refresh its
+        subfolders. Another time: read it again (_walk with the old node)."""
+        if self.cancel.is_set():
+            return old
+        try:
+            st = os.lstat(old.path)
+        except OSError:
+            return None
+        if not stat.S_ISDIR(st.st_mode) or (st.st_dev and st.st_dev != dev):
+            return None
+        if st.st_mtime_ns != old.stamp or not old.stamp:
+            return self._walk(old.path, old.name, dev, inherited, depth, pools, hidden, inner, proj, old=old)
+        if inner >= 2:
+            # A totals-only folder deep in dependencies: the base kept no subfolders, so keep it whole.
+            with self._lock:
+                self._kept_trees.add(old.path)
+                self.count += old.files
+                self.bytes += old.size
+            return old
+        node = Node(name=old.name, path=old.path, mtime=old.mtime, entries=old.entries, top=list(old.top),
+                    unreadable=old.unreadable, stamp=old.stamp, marks=old.marks)
+        # Its own files: the totals without the subfolders.
+        # max(0, ...): forget() patches only some totals, so a difference can drift below 0.
+        node.size = max(0, old.size - sum(c.size for c in old.children))
+        node.files = max(0, old.files - sum(c.files for c in old.children))
+        node.cats = [max(0, old.cats[i] - sum(c.cats[i] for c in old.children)) for i in range(8)]
+        node.ages = [max(0, old.ages[i] - sum(c.ages[i] for c in old.children)) for i in range(4)]
+        node.dirs = max(0, old.dirs - sum(1 + c.dirs for c in old.children))
+        with self._lock:
+            self._kept.add(old.path)
+            self.count += node.files
+            self.bytes += node.size
+        here_proj = proj or bool(old.marks & protect.PROJECT_MARKERS) or old.name in protect.TOOL_NAMES
+        jobs = []
+        for c in old.children:
+            child_cat = inherited
+            if child_cat is None:
+                child_cat = CODEDEPS if c.name in CODEDEP_DIRS else CACHES if c.name in CACHE_DIRS else None
+            ch_hidden = hidden or c.name.startswith(".")
+            ch_inner = inner + 1 if child_cat is not None else 0
+            args = (c, dev, child_cat, depth + 1, pools, ch_hidden, ch_inner, here_proj)
+            jobs.append(pools[depth].submit(self._diff, *args) if depth < len(pools) else self._diff(*args))
+        for j in jobs:
+            child = j if isinstance(j, Node) or j is None else j.result()
+            if child is None:
+                continue
+            node.size += child.size
+            node.files += child.files
+            node.dirs += 1 + child.dirs
+            for i in range(8):
+                node.cats[i] += child.cats[i]
+            for i in range(4):
+                node.ages[i] += child.ages[i]
+            self._dir_junk(child, old.path, old.marks, inherited, hidden, here_proj)
+            node.children.append(child)
+        return node
+
+    def _from_base(self, path: str) -> bool:
+        """True when the folder of `path` was not read again: its files came from the base scan."""
+        parent = os.path.dirname(path)
+        if parent in self._kept:
+            return True
+        cur = parent
+        while True:
+            if cur in self._kept_trees:
+                return True
+            nxt = os.path.dirname(cur)
+            if nxt == cur or len(nxt) < len(self.root):
+                return False
+            cur = nxt
 
     def _file_seen(self, path: str, name: str, ext: str, size: int, mtime: int, atime: int, cat: int, parent: str, safe_zone: bool) -> None:
         with self._lock:
@@ -278,55 +380,162 @@ class Scanner:
         t0 = time.time()
         st = os.stat(self.root)
         name = os.path.basename(self.root.rstrip("/")) or "/"
+        base = self.base if self.base and self.base.root.path == self.root and self.base.dev == st.st_dev else None
         with ThreadPoolExecutor(8, thread_name_prefix="space1") as p1, ThreadPoolExecutor(12, thread_name_prefix="space2") as p2:
-            root = self._walk(self.root, name, st.st_dev, None, 0, [p1, p2])
-        largest = sorted(self._largest, reverse=True)
-        return ScanResult(root, t0, time.time(), self.count, largest, self._junk, st.st_dev)
+            if base:
+                root = self._diff(base.root, st.st_dev, None, 0, [p1, p2], False, 0, False) or Node(name=name, path=self.root)
+            else:
+                root = self._walk(self.root, name, st.st_dev, None, 0, [p1, p2])
+        largest, junk = self._largest, self._junk
+        if base:
+            # Files in folders that the refresh did not read: their entries come from the base.
+            largest = largest + [x for x in base.largest if self._from_base(x[1])]
+            junk = junk + [j for j in base.junk if not j.is_dir and self._from_base(j.path)]
+        largest = heapq.nlargest(TOP_FILES_GLOBAL, largest)
+        return ScanResult(root, t0, time.time(), root.files, largest, junk, st.st_dev, refreshed=bool(base))
 
 
 # ---------------------------------------------------------------- store
 
 
+# A saved scan older than this gets a refresh when Space asks for the status. Older than FULL_AFTER: a full walk.
+REFRESH_AFTER = 10 * 60
+FULL_AFTER = 7 * DAY
+SAVE_VERSION = 1
+SAVE_DELAY = 60.0
+
+
 class SpaceStore:
-    """The latest scan per root, plus the state of a running scan."""
+    """The latest scan per root, plus the state of a running scan. Each scan is saved in <data>/space and
+    loaded at start, so Space does not walk the disk again after each start."""
 
     def __init__(self) -> None:
         self.results: dict[str, ScanResult] = {}
         self.running: Scanner | None = None
         self.running_root: str | None = None
         self.error: str | None = None
-        self.pending: str | None = None
+        self.pending: tuple[str, bool] | None = None
+        # Set when no load runs. _start_services clears it and loads the saved scans in the background.
+        self.loaded = threading.Event()
+        self.loaded.set()
         self._lock = threading.Lock()
+        self._save_timer: threading.Timer | None = None
 
     def status(self) -> dict:
         r = self.running
         return {
             "scanning": r is not None,
+            "refreshing": bool(r and r.base),
+            "loading": not self.loaded.is_set(),
             "path": self.running_root,
             "files": r.count if r else 0,
             "bytes": r.bytes if r else 0,
             "roots": [
-                {"path": k, "size": v.root.size, "files": v.files, "finished": int(v.finished * 1000), "seconds": round(v.finished - v.started, 2)}
+                {"path": k, "size": v.root.size, "files": v.files, "finished": int(v.finished * 1000),
+                 "seconds": round(v.finished - v.started, 2), "refreshed": v.refreshed, "full": int((v.full or v.finished) * 1000)}
                 for k, v in self.results.items()
             ],
             "error": self.error,
         }
 
-    def start(self, root: str) -> bool:
+    def start(self, root: str, full: bool = False) -> bool:
+        """Scan `root`. With a saved scan of the same root and not `full`: a refresh, which reads only changed folders."""
+        self.loaded.wait(60)  # a saved scan can still be loading: a refresh needs it
+        root = os.path.abspath(root)
         with self._lock:
             if self.running is not None:
-                if self.running.root == os.path.abspath(root):
+                if self.running.root == root and (self.running.base is None or not full):
                     return False
                 # A new request wins: stop the running scan and start this one when it ends.
-                self.pending = root
+                self.pending = (root, full)
                 self.running.cancel.set()
                 return True
-            sc = Scanner(root)
+            sc = Scanner(root, base=None if full else self.results.get(root))
             self.running = sc
             self.running_root = sc.root
             self.error = None
         threading.Thread(target=self._run, args=(sc,), name="space-scan", daemon=True).start()
         return True
+
+    def maybe_refresh(self) -> None:
+        """Refresh old scans when Space is in use (it asks for the status). Not at start: the start is busy."""
+        if not self.loaded.is_set() or self.running is not None:
+            return
+        now = time.time()
+        for root, res in list(self.results.items()):
+            if now - (res.full or res.finished) > FULL_AFTER:
+                self.start(root, full=True)
+                return
+            if now - res.finished > REFRESH_AFTER:
+                self.start(root)
+                return
+
+    # ------------------------------------------------------------ saved scans
+
+    @staticmethod
+    def _save_dir():
+        from .. import config
+
+        d = config.DATA_DIR / "space"
+        d.mkdir(mode=0o700, exist_ok=True)
+        return d
+
+    def _save(self, res: ScanResult) -> None:
+        """Write one scan (pickle, zlib). Only this user can read the data folder (0700)."""
+        import hashlib
+        import pickle
+        import zlib
+
+        try:
+            d = self._save_dir()
+            name = hashlib.sha1(res.root.path.encode()).hexdigest()[:16] + ".scan"
+            data = zlib.compress(pickle.dumps((SAVE_VERSION, res), protocol=pickle.HIGHEST_PROTOCOL), 1)
+            tmp = d / (name + ".tmp")
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            os.replace(tmp, d / name)
+        except Exception:  # noqa: BLE001 - a scan that is not saved is only slower at the next start
+            log.exception("could not save the space scan of %s", res.root.path)
+
+    def save_soon(self) -> None:
+        """Save the scans after a change that patched them (forget, refresh_paths), at most once a minute."""
+        with self._lock:
+            if self._save_timer is not None:
+                return
+
+            def run():
+                with self._lock:
+                    self._save_timer = None
+                for res in list(self.results.values()):
+                    self._save(res)
+
+            self._save_timer = threading.Timer(SAVE_DELAY, run)
+            self._save_timer.daemon = True
+            self._save_timer.start()
+
+    def load_saved(self) -> None:
+        """Load the saved scans (at start, in the background)."""
+        import pickle
+        import zlib
+
+        try:
+            for f in self._save_dir().glob("*.scan"):
+                try:
+                    version, res = pickle.loads(zlib.decompress(f.read_bytes()))
+                    if version != SAVE_VERSION or os.stat(res.root.path).st_dev != res.dev:
+                        f.unlink(missing_ok=True)
+                        continue
+                except Exception:  # noqa: BLE001 - an old or broken file: drop it, the next scan writes it again
+                    f.unlink(missing_ok=True)
+                    continue
+                with self._lock:
+                    if res.root.path not in self.results:
+                        self.results[res.root.path] = res
+                log.info("space scan %s loaded: %d files, scanned %d min ago", res.root.path, res.files,
+                         (time.time() - res.finished) // 60)
+        finally:
+            self.loaded.set()
 
     def _run(self, sc: Scanner) -> None:
         stop = threading.Event()
@@ -340,6 +549,7 @@ class SpaceStore:
             res = sc.run()
             if sc.cancel.is_set():
                 return  # a partial scan is wrong, so Raven drops it
+            res.full = sc.base.full or sc.base.finished if sc.base else res.finished
             # A new scan of a folder replaces scans of folders inside it.
             for k in list(self.results):
                 if inside(k, sc.root):
@@ -348,8 +558,10 @@ class SpaceStore:
             from ..compress.candidates import forget_cache
 
             forget_cache()  # candidates come from the scan, so a new scan makes them stale
-            log.info("space scan %s: %d files, %.1f GB in %.1f s", sc.root, res.files, res.root.size / 1e9, res.finished - res.started)
+            log.info("space %s %s: %d files, %.1f GB in %.1f s", "refresh" if sc.base else "scan", sc.root, res.files,
+                     res.root.size / 1e9, res.finished - res.started)
             _persist(res)
+            self._save(res)
         except Exception as e:  # noqa: BLE001
             log.exception("space scan failed")
             self.error = str(e)
@@ -358,7 +570,7 @@ class SpaceStore:
             self.running = None
             nxt, self.pending = self.pending, None
             if nxt:
-                self.start(nxt)
+                self.start(*nxt)
             else:
                 events.publish("space_done", path=sc.root, error=self.error)
 
@@ -412,6 +624,7 @@ class SpaceStore:
         for res in self.results.values():
             res.junk = [j for j in res.junk if j.path not in gone and not any(below(j.path, g) for g in gone)]
             res.largest = [x for x in res.largest if x[1] not in gone]
+        self.save_soon()
 
     def refresh_paths(self, paths: list[str]) -> None:
         """Bring single items in the scan up to date: new archives, restored folders, removed items."""
@@ -455,6 +668,7 @@ class SpaceStore:
                 if cur == res.root.path:
                     break
                 cur = os.path.dirname(cur)
+        self.save_soon()
 
     def dir_size(self, path: str) -> int | None:
         f = self.find(path)

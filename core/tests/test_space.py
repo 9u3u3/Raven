@@ -194,3 +194,82 @@ def test_one_installer_does_not_make_a_software_folder(tmp_path):
     for n in ("libfoo.so", "a.txt", "b.txt", "c.txt", "d.txt"):
         (lib / n).write_bytes(b"x")
     assert protect.is_software_dir(str(lib))  # a library: an installed app
+
+
+def _summary(res):
+    """What Space shows: totals of every kept folder, the junk and the largest files."""
+    nodes = {}
+    stack = [res.root]
+    while stack:
+        n = stack.pop()
+        nodes[n.path] = (n.size, n.files, n.dirs, tuple(n.cats), sorted(t[1] for t in n.top), n.entries)
+        stack.extend(n.children)
+    junk = sorted((j.rule, j.path, j.size, j.checked) for j in res.junk)
+    largest = sorted((x[0], x[1]) for x in res.largest)
+    return res.files, nodes, junk, largest
+
+
+def _same_as_full(root, base):
+    ref = scan.Scanner(str(root)).run()
+    sc = scan.Scanner(str(root), base=base)
+    new = sc.run()
+    assert new.refreshed and _summary(new) == _summary(ref)
+    return new, sc
+
+
+def test_refresh_without_changes_reads_no_folder(tmp_path, monkeypatch):
+    make_tree(tmp_path)
+    base = scan.Scanner(str(tmp_path)).run()
+    walked = []
+    real = scan.Scanner._walk
+    monkeypatch.setattr(scan.Scanner, "_walk", lambda self, path, *a, **k: walked.append(path) or real(self, path, *a, **k))
+    new = scan.Scanner(str(tmp_path), base=base).run()
+    assert walked == [] and _summary(new) == _summary(base)
+
+
+def test_refresh_matches_a_full_scan_after_changes(tmp_path):
+    make_tree(tmp_path)
+    (tmp_path / "docs" / "deep" / "deeper").mkdir(parents=True)
+    (tmp_path / "docs" / "deep" / "deeper" / "a.pdf").write_bytes(b"d" * 3000)
+    (tmp_path / "other").mkdir()
+    (tmp_path / "other" / "x.txt").write_bytes(b"x" * 100)
+    base = scan.Scanner(str(tmp_path)).run()
+    time.sleep(0.01)
+    # A new file deep down, a removed folder, a new project with node_modules, a renamed folder, a new nested folder.
+    (tmp_path / "docs" / "deep" / "deeper" / "b.mp4").write_bytes(b"v" * 70000)
+    import shutil
+
+    shutil.rmtree(tmp_path / "photos")
+    p2 = tmp_path / "proj2"
+    (p2 / "node_modules" / "b").mkdir(parents=True)
+    (p2 / "package.json").write_text("{}")
+    (p2 / "node_modules" / "b" / "i.js").write_bytes(b"y" * 5000)
+    os.rename(tmp_path / "other", tmp_path / "renamed")
+    (tmp_path / "docs" / "new" / "inner").mkdir(parents=True)
+    (tmp_path / "docs" / "new" / "inner" / "n.md").write_bytes(b"n" * 10)
+    new, sc = _same_as_full(tmp_path, base)
+    # Unchanged folders kept their own files from the base: Downloads, proj, docs/deep (not deeper).
+    assert {str(tmp_path / "Downloads"), str(tmp_path / "proj"), str(tmp_path / "docs" / "deep")} <= sc._kept
+    assert str(tmp_path / "docs" / "deep" / "deeper") not in sc._kept
+    # A second refresh on the refreshed scan is right too.
+    (tmp_path / "renamed" / "y.txt").write_bytes(b"y" * 200)
+    _, sc = _same_as_full(tmp_path, new)
+    assert str(tmp_path / "renamed") not in sc._kept and str(tmp_path / "Downloads") in sc._kept
+
+
+def test_saved_scan_loads_after_a_restart(tmp_path):
+    make_tree(tmp_path)
+    store = scan.SpaceStore()
+    res = scan.Scanner(str(tmp_path)).run()
+    store._save(res)
+    again = scan.SpaceStore()
+    again.loaded.clear()
+    again.load_saved()
+    assert again.loaded.is_set()
+    loaded = again.results[str(tmp_path)]
+    assert _summary(loaded) == _summary(res)
+    # A broken file is dropped, not loaded.
+    bad = scan.SpaceStore._save_dir() / "0000000000000000.scan"
+    bad.write_bytes(b"not a scan")
+    scan.SpaceStore().load_saved()
+    assert not bad.exists()

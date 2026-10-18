@@ -19,6 +19,7 @@ router = APIRouter(prefix="/space")
 class PathBody(BaseModel):
     path: str
     min_size: int = 1024
+    full: bool = False  # True: walk the whole tree. False: refresh a saved scan of this root, if there is one.
 
 
 @router.get("/meta")
@@ -31,12 +32,13 @@ def start_scan(b: PathBody):
     p = os.path.abspath(os.path.expanduser(b.path))
     if not os.path.isdir(p):
         raise HTTPException(400, f"Not a folder: {b.path}")
-    started = store.start(p)
+    started = store.start(p, full=b.full)
     return {"started": started, **store.status()}
 
 
 @router.get("/status")
 def status():
+    store.maybe_refresh()
     return {**store.status(), "dupes": dupe_job.status()}
 
 
