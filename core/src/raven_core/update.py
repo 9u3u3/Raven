@@ -13,7 +13,7 @@ import time
 from . import db
 from .config import VERSION
 
-URL = os.environ.get("RAVEN_UPDATE_URL", "https://api.github.com/repos/9u3u3/ravenfiles/releases/latest")
+URL = os.environ.get("RAVEN_UPDATE_URL", "https://api.github.com/repos/9u3u3/Raven/releases/latest")
 EVERY = 24 * 3600
 
 

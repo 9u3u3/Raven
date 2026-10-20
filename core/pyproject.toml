@@ -6,7 +6,7 @@ authors = [
     { name = "9u3u3", email = "harshgaonkar57@gmail.com" }
 ]
 requires-python = ">=3.12"
-license = { file = "../LICENSE" }
+license = "AGPL-3.0-or-later"
 classifiers = ["Private :: Do Not Upload"]
 dependencies = [
     "anthropic>=1.15.0",

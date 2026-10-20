@@ -2,7 +2,7 @@
   "name": "raven",
   "version": "0.3.0-beta.2",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0-or-later",
   "description": "Raven: a file manager that finds, organizes and shrinks your files with AI",
   "main": "./out/main/index.js",
   "scripts": {

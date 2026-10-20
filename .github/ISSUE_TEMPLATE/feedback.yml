@@ -1,0 +1,14 @@
+name: Idea or feedback
+description: Something that can be better, or a feature that you want.
+labels: ["feedback"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea or feedback
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it helps you

@@ -1,0 +1,39 @@
+name: Problem report
+description: Raven does something wrong, stops or shows an error.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Issues are public. Do not put private file content, names or keys here.
+        In Raven, Settings, Help, "Copy diagnostics" copies a report with no file content and no keys.
+  - type: input
+    id: version
+    attributes:
+      label: Raven version and system
+      description: Settings, Updates shows the version. For example "0.3.0-beta.1 on Windows 11".
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      description: The steps that make the problem happen again.
+      value: |
+        1.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics (optional)
+      description: Paste the text from Settings, Help, "Copy diagnostics".
+      render: text

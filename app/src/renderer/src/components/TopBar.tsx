@@ -9,7 +9,7 @@ const SCREENS: [Screen, string][] = [
   ['privacy', 'Privacy']
 ]
 
-/** The Raven mark, the same as on the site (raven-site/assets/mark.svg): three facets and an eye. */
+/** The Raven mark, the same as on the site: three facets and an eye. */
 export function Mark({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden className="shrink-0">

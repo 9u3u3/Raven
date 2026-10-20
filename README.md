@@ -12,9 +12,26 @@ citations, runs file commands that you review first, and shows where your disk s
 
 ## Download (beta)
 
-The beta builds for Linux (AppImage) and Windows (installer) are in
-[9u3u3/ravenfiles](https://github.com/9u3u3/ravenfiles/releases/latest). Report problems in
-[its issues](https://github.com/9u3u3/ravenfiles/issues). Its `BETA-LICENSE.md` says how you can use the beta.
+Get the newest build from **[Releases](https://github.com/9u3u3/Raven/releases/latest)**:
+
+| System | File |
+|---|---|
+| Linux (x86_64) | `Raven-<version>-x86_64.AppImage` |
+| Windows 10 and 11 (x64) | `Raven-<version>-x64.exe` |
+
+- `SHA256SUMS.txt` holds the SHA-256 sum of each file. On Linux, run `sha256sum -c SHA256SUMS.txt --ignore-missing`.
+  On Windows, run `Get-FileHash .\Raven-<version>-x64.exe` in PowerShell and compare the value.
+- Linux: run `chmod +x Raven-*.AppImage`, then start it. The AppImage needs FUSE 2 (`libfuse2` on Ubuntu 22.04 or
+  newer, `fuse2` on Arch Linux).
+- Windows: the installer is not signed yet. If SmartScreen shows "Windows protected your PC", click **More info**,
+  then **Run anyway**. Choose **Only for me** in the installer. The first start can take a few minutes while Windows
+  Defender checks the new files. If no window shows after 3 minutes, end Raven in Task Manager and start it again.
+- You need 8 GB of RAM or more (16 GB is better) and about 6 GB of free disk space for the models. Raven downloads
+  them at the first start. After that, Raven works with no network. There is no macOS build yet.
+
+Report a problem in [the issues](https://github.com/9u3u3/Raven/issues/new/choose). In Raven, Settings, Help,
+**Copy diagnostics** gives a report with no file content and no keys. Issues are public, so do not put private data
+in them. Keep a backup of your important files: Raven can undo each change that it makes, but it is beta software.
 
 ## Quick start (development)
 
@@ -381,5 +398,8 @@ Raven loads a model only when a task needs it, and frees it when the task is don
 
 ## License
 
-Raven is proprietary software. All rights reserved. See [LICENSE](LICENSE).
-Third-party dependencies and models keep their own licenses.
+Raven is free software under the GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later). See
+[LICENSE](LICENSE). You can use, study, change and share Raven. If you share a changed version, or let people use it
+over a network, you must give them its source code under the same license.
+
+Third-party dependencies and models keep their own licenses. Settings, Help, About lists them.
