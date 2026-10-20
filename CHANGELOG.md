@@ -10,11 +10,16 @@ A PATCH step only fixes problems. A beta build adds `-beta.N` (for example `0.3.
 ### New
 
 - A welcome card for the `raven` terminal command.
+- A permanent delete shows a progress card.
 
 ### Changed
 
 - Raven is open source under AGPL-3.0-or-later. The builds, the issues and the update check move to
   https://github.com/9u3u3/Raven. The 9u3u3/ravenfiles repository stays for older builds and gets no new builds.
+- Space saves the scan and refreshes only the folders that changed.
+- Raven deletes a folder tree with `rm` in its own process.
+- The trash shows items with a dot name.
+- Reclaim forgets trashed items and keeps the junk of active projects out of the plan.
 
 ## 0.3.0-beta.2 (2026-10-18)
 
