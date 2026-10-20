@@ -27,7 +27,7 @@ Get the newest build from **[Releases](https://github.com/9u3u3/Raven/releases/l
   then **Run anyway**. Choose **Only for me** in the installer. The first start can take a few minutes while Windows
   Defender checks the new files. If no window shows after 3 minutes, end Raven in Task Manager and start it again.
 - You need 8 GB of RAM or more (16 GB is better) and about 6 GB of free disk space for the models. Raven downloads
-  them at the first start. After that, Raven works with no network. There is no macOS build yet.
+  them at the first start. After that, Raven works with no network. There is no macOS build yet but will come out soon.
 
 Report a problem in [the issues](https://github.com/9u3u3/Raven/issues/new/choose). In Raven, Settings, Help,
 **Copy diagnostics** gives a report with no file content and no keys. Issues are public, so do not put private data
