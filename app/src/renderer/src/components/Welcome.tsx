@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Eye, FolderLock, HardDrive, MessageSquare, Search, ShieldCheck, Sparkles, Undo2, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Eye, FolderLock, HardDrive, MessageSquare, Search, ShieldCheck, Sparkles, SquareTerminal, Undo2, type LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { post } from '../lib/api'
 import { useApp } from '../store'
@@ -90,6 +90,17 @@ const CARDS: Card[] = [
       'Delete moves files to the Trash. A permanent delete asks you again.'
     ],
     keys: [['Ctrl+Z', 'Undo']]
+  },
+  {
+    icon: SquareTerminal,
+    kicker: 'Terminal',
+    title: 'Search from the terminal.',
+    lines: [
+      'The raven command gives the Ctrl+K search in a terminal, on Linux and macOS. Windows has no terminal command yet.',
+      'Enter goes to the folder of the result. Ctrl+O opens the item.',
+      'To install it, open Settings, Integrations, Terminal, and press Install.'
+    ],
+    keys: [['rv', 'Search from your shell']]
   },
   {
     icon: Sparkles,
