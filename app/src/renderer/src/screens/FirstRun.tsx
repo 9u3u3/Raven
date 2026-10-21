@@ -121,7 +121,9 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
   const needOllama = !!fst && !!sizes?.ollama && !fst.ollama.running
   const modelRows = (fst?.features ?? []).filter((f) => f.kind === 'model' && (f.always || f.on))
 
-  const wrapCls = 'flex h-full justify-center overflow-y-auto bg-bg'
+  // items-start: a stretched column ends at the window edge, so its bottom padding (room for the fixed Start
+  // bar) does not follow the content, and the bar covers the last step.
+  const wrapCls = 'flex h-full items-start justify-center overflow-y-auto bg-bg'
 
   if (phase === 'ready') {
     const pending = modelRows.filter((f) => f.state === 'downloading' || f.state === 'missing' || f.state === 'needs_ollama')
@@ -170,7 +172,7 @@ export default function FirstRun({ onDone }: { onDone: () => void }) {
             <button className="btn-primary !px-4 !py-1.5" onClick={() => void open()}>
               Open Raven
             </button>
-            <span className="text-[12.5px] text-muted">{pending.length ? `${pending.length} download${pending.length === 1 ? '' : 's'} continue in the background.` : 'The status line at the bottom shows the index.'}</span>
+            <span className="text-[12.5px] text-muted">{pending.length ? `${pending.length} download${pending.length === 1 ? '' : 's'} continue in the background. The status line at the bottom shows them.` : 'The status line at the bottom shows the index.'}</span>
           </div>
         </div>
       </div>
