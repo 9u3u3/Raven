@@ -5,6 +5,14 @@ A PATCH step only fixes problems. A beta build adds `-beta.N` (for example `0.3.
 `core/src/raven_core/config.py`, `core/pyproject.toml` and `app/package.json` hold the same version.
 `tests/test_release_build.py` checks this.
 
+## 0.3.0-beta.5 (2026-10-21)
+
+This build holds the changes of 0.3.0-beta.4. 0.3.0-beta.4 was not published.
+
+### Security
+
+- Pillow 13.0.0 and certifi 2026.10.19. The older versions have known vulnerabilities.
+
 ## 0.3.0-beta.4 (2026-10-21)
 
 ### Changed

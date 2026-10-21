@@ -1,6 +1,6 @@
 [project]
 name = "raven-core"
-version = "0.3.0-beta.4"
+version = "0.3.0-beta.5"
 description = "Raven core: the local sidecar for file, index, AI and privacy work"
 authors = [
     { name = "9u3u3", email = "harshgaonkar57@gmail.com" }
@@ -21,7 +21,7 @@ dependencies = [
     "model2vec>=0.6",
     "onnxruntime>=1.22",
     "pikepdf>=10.17.0",
-    "pillow>=12.3.0",
+    "pillow>=13.0.0",
     "platformdirs>=4.13.0",
     "psutil>=7.2.2",
     "pypdfium2>=5.14.0",

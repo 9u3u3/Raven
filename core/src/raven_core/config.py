@@ -8,7 +8,7 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
-VERSION = "0.3.0-beta.4"
+VERSION = "0.3.0-beta.5"
 
 # A packaged build (PyInstaller) is a release build. Developer-only paths stay off in it (PLAN4 R1): the
 # `claude -p` provider, which uses the user's claude.ai login, and the screenshot and test hooks.
