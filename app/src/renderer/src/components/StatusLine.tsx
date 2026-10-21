@@ -1,7 +1,71 @@
+import { useEffect, useState } from 'react'
+import { get, on } from '../lib/api'
 import { size } from '../lib/format'
 import IndexMeter from './IndexMeter'
 import { controlJob, setScreen, undo, useApp } from '../store'
 import type { CopyJob } from '../lib/types'
+
+type ModelJob = { key: string; label: string; state: 'running' | 'error'; done: number; total: number; error: string | null }
+type ModelJobs = { jobs: ModelJob[]; waiting: { key: string; label: string; ollama: boolean }[] }
+
+/** The model downloads (PLAN4 section 5.3). They go on in the background, and each feature starts when its model is here. */
+function Downloads() {
+  const [st, setSt] = useState<ModelJobs | null>(null)
+  useEffect(() => {
+    const load = (): void => void get<ModelJobs>('/models/jobs').then(setSt).catch(() => {})
+    load()
+    let t: ReturnType<typeof setTimeout> | null = null
+    // Progress events come often: load at most once a second.
+    const off = on('models_progress', () => {
+      if (!t) t = setTimeout(() => ((t = null), load()), 1000)
+    })
+    // The sidecar starts a waiting download by itself (after Ollama starts): look again now and then.
+    const iv = setInterval(load, 15000)
+    return () => {
+      off()
+      clearInterval(iv)
+      if (t) clearTimeout(t)
+    }
+  }, [])
+  if (!st || (!st.jobs.length && !st.waiting.length)) return null
+  const running = st.jobs.filter((j) => j.state === 'running')
+  const failed = st.jobs.filter((j) => j.state === 'error')
+  const done = running.reduce((a, j) => a + (j.done || 0), 0)
+  const total = running.reduce((a, j) => a + (j.total || 0), 0)
+  const pct = total ? Math.min(100, Math.floor((done / total) * 100)) : 0
+  const text = running.length
+    ? `Downloading ${running.length === 1 ? running[0].label : `${running.length} models`} ${pct}%`
+    : failed.length
+      ? `${failed.length} download${failed.length === 1 ? '' : 's'} failed · tries again`
+      : `${st.waiting.length} download${st.waiting.length === 1 ? '' : 's'} ${st.waiting.every((w) => w.ollama) ? 'wait for Ollama' : 'start soon'}`
+  const tip = [
+    ...running.map((j) => `${j.label}: ${j.total ? `${size(j.done)} of ${size(j.total)}` : 'starting'}`),
+    ...failed.map((j) => `${j.label}: failed, ${j.error ?? ''}. Raven tries again in 2 min.`),
+    ...st.waiting.map((w) => `${w.label}: ${w.ollama ? 'waits for Ollama' : 'starts soon'}`),
+    'Each feature starts when its model is here. Open Settings, Features and models.'
+  ].join('\n')
+  return (
+    <>
+      <span className="text-muted/50">·</span>
+      <button
+        className={`flex shrink-0 items-center gap-2 transition-colors hover:text-text ${failed.length && !running.length ? 'text-danger' : ''}`}
+        title={tip}
+        onClick={() => {
+          useApp.setState({ settingsTab: 'features' })
+          setScreen('settings')
+        }}
+      >
+        <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${running.length ? 'anim-breathe bg-accent' : failed.length ? 'bg-danger' : 'bg-muted'}`} />
+        {text}
+        {running.length > 0 && (
+          <span className="inline-block h-[2px] w-16 bg-line">
+            <span className="block h-full bg-accent transition-[width] duration-300" style={{ width: `${pct}%` }} />
+          </span>
+        )}
+      </button>
+    </>
+  )
+}
 
 /** The running copy or move: progress, speed and time left, with Pause and Cancel (section 6.1). */
 function JobLine({ job, queued }: { job: CopyJob; queued: number }) {
@@ -69,6 +133,7 @@ export default function StatusLine() {
           Add folder
         </button>
       )}
+      <Downloads />
       <span className="text-muted/50">·</span>
       <button className="link text-accent" onClick={() => setScreen('privacy')} title="AI mode. Open Privacy to change it">
         {modeLabel}

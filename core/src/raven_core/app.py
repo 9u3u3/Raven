@@ -137,6 +137,10 @@ def _start_background() -> None:
     from . import maintenance
 
     threading.Thread(target=maintenance.loop, args=(indexer.stop,), name="index-maintenance", daemon=True).start()
+    from . import features
+
+    # The chosen model downloads go on after a quit, a network error, or a late Ollama start.
+    threading.Thread(target=features.loop, args=(indexer.stop,), name="model-downloads", daemon=True).start()
 
 
 DISCOVERY = config.DATA_DIR / "sidecar.json"
@@ -305,6 +309,14 @@ def models_status():
     from . import models
 
     return models.status()
+
+
+@app.get("/models/jobs")
+def models_jobs():
+    """The model downloads for the status line: running, failed, and waiting (PLAN4 section 5.3)."""
+    from . import features, models
+
+    return {"jobs": models.jobs(), "waiting": features.waiting()}
 
 
 class ModelsBody(BaseModel):

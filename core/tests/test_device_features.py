@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+import time
 
 import pytest
 
@@ -84,17 +85,25 @@ def fake_models(monkeypatch):
     present = {"reranker": True}
     calls = []
     running = {"on": False}
+    jobs: dict[str, dict] = {}
 
     def status():
-        return {"files": [{"name": k, "present": present.get(k, False), "job": None} for k in models.CATALOG],
-                "ollama": [{"name": k, "present": present.get(f"ollama:{k}", False), "job": None} for k in models.OLLAMA],
+        return {"files": [{"name": k, "present": present.get(k, False), "job": jobs.get(k)} for k in models.CATALOG],
+                "ollama": [{"name": k, "present": present.get(f"ollama:{k}", False), "job": jobs.get(f"ollama:{k}")}
+                           for k in models.OLLAMA],
                 "ollama_running": running["on"]}
 
+    def download(names):
+        # The fake download ends at once: the model is here.
+        calls.append(list(names))
+        present.update({n: True for n in names})
+
     monkeypatch.setattr(models, "status", status)
-    monkeypatch.setattr(models, "download", lambda names: calls.append(list(names)))
+    monkeypatch.setattr(models, "download", download)
+    monkeypatch.setattr(models, "jobs", lambda: [{"key": k, "label": k, **j} for k, j in jobs.items()])
     monkeypatch.setattr(models, "remove", lambda name: present.pop(name, None))
     monkeypatch.setattr(device, "info", lambda fresh=False: dev(ram=16, gpu=6, threads=16))
-    yield present, calls, running
+    yield present, calls, running, jobs
     db.set_setting("features", {})
     db.set_setting("features_pending", [])
     db.set_setting("embed_model", None)
@@ -116,7 +125,7 @@ def test_status_lists_every_feature_with_a_fit(fake_models):
 
 
 def test_apply_sets_switches_and_sizes_and_waits_for_ollama(fake_models):
-    present, calls, running = fake_models
+    present, calls, running, _jobs = fake_models
     out = features.apply({"image": True, "speech": False, "llm": True}, {"llm": "qwen3:1.7b", "meaning": "embeddinggemma"})
     assert lite.enabled("image") and not lite.enabled("speech")
     assert local.LLM == "qwen3:1.7b" and db.get_setting("llm_model") == "qwen3:1.7b"
@@ -129,6 +138,24 @@ def test_apply_sets_switches_and_sizes_and_waits_for_ollama(fake_models):
     started = features.resume()
     assert "ollama:qwen3:1.7b" in started and calls[-1] == started
     assert features.resume() == []
+    assert db.get_setting("features_pending") == []
+
+
+def test_resume_starts_a_stopped_download_again(fake_models):
+    present, calls, running, jobs = fake_models
+    running["on"] = True
+    db.set_setting("features_pending", ["siglip2", "whisper-base", "ollama:qwen3:4b"])
+    # siglip2 runs, whisper-base failed just now, and Raven quit during the Ollama pull (no job).
+    jobs["siglip2"] = {"state": "running", "done": 1, "total": 9, "error": None}
+    jobs["whisper-base"] = {"state": "error", "done": 0, "total": 0, "error": "network", "ended": time.time()}
+    assert features.resume() == ["ollama:qwen3:4b"]
+    # After RETRY_S, the failed download starts again.
+    jobs["whisper-base"]["ended"] = time.time() - features.RETRY_S - 1
+    assert features.resume() == ["whisper-base"]
+    # A model that is here leaves the list.
+    present["siglip2"] = True
+    features.resume()
+    assert "siglip2" not in db.get_setting("features_pending")
 
 
 def test_a_static_meaning_model_means_lite_mode(fake_models):
@@ -146,7 +173,7 @@ def test_unknown_names_are_refused(fake_models):
 
 
 def test_remove_frees_the_model_and_turns_the_feature_off(fake_models):
-    present, calls, running = fake_models
+    present, calls, running, _jobs = fake_models
     present["siglip2"] = True
     features.apply({"image": True})
     out = features.remove("image")

@@ -114,11 +114,16 @@ class TranscribeJob:
         ).fetchall()
 
     def loop(self, ix) -> None:
-        if not available():
-            self.state["error"] = "Whisper model files are not in models/whisper-base, or ffmpeg is not installed"
-            log.info(self.state["error"])
-            return
-        from .. import lite
+        from .. import lite, models
+
+        # The model can download while Raven runs (features.loop): wait for it, then start.
+        while not available() or models.busy("whisper-base"):
+            if not self.state.get("error"):
+                self.state["error"] = "Whisper model files are not in models/whisper-base, or ffmpeg is not installed"
+                log.info(self.state["error"])
+            if ix.stop.wait(30):
+                return
+        self.state["error"] = None
 
         while not ix.stop.is_set():
             if not lite.enabled("speech") or lite.paused():

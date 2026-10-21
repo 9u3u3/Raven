@@ -219,11 +219,16 @@ class VisualJob:
         ).fetchone()[0]
 
     def loop(self, ix) -> None:
-        if not siglip.available():
-            self.state["error"] = "SigLIP 2 model files are not in models/siglip2"
-            log.info(self.state["error"])
-            return
-        from .. import lite
+        from .. import lite, models
+
+        # The model can download while Raven runs (features.loop): wait for it, then start.
+        while not siglip.available() or models.busy("siglip2"):
+            if not self.state.get("error"):
+                self.state["error"] = "SigLIP 2 model files are not in models/siglip2"
+                log.info(self.state["error"])
+            if ix.stop.wait(30):
+                return
+        self.state["error"] = None
 
         while not ix.stop.is_set():
             if not lite.enabled("image") or lite.paused():

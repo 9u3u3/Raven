@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from pathlib import Path
 
 import httpx
@@ -115,9 +116,17 @@ def _download(name: str) -> None:
                     continue
                 out.parent.mkdir(parents=True, exist_ok=True)
                 part = out.with_name(out.name + ".part")
-                with c.stream("GET", f"{HF}/{spec['repo']}/resolve/main/{f}") as r:
+                # A quit or a network error leaves a .part file: ask for the rest only.
+                have = part.stat().st_size if part.exists() else 0
+                if not sizes[f] or have >= sizes[f]:
+                    have = 0
+                headers = {"Range": f"bytes={have}-"} if have else {}
+                with c.stream("GET", f"{HF}/{spec['repo']}/resolve/main/{f}", headers=headers) as r:
                     r.raise_for_status()
-                    with open(part, "wb") as fh:
+                    resumed = have and r.status_code == 206
+                    if resumed:
+                        job["done"] += have
+                    with open(part, "ab" if resumed else "wb") as fh:
                         last = 0
                         for chunk in r.iter_bytes(1024 * 1024):
                             if job.get("cancel"):
@@ -130,7 +139,7 @@ def _download(name: str) -> None:
                 part.replace(out)
         job["state"] = "done"
     except Exception as e:  # noqa: BLE001
-        job.update(state="error", error=str(e)[:200])
+        job.update(state="error", error=str(e)[:200], ended=time.time())
         log.warning("model %s: %s", name, e)
     _emit(name)
 
@@ -156,7 +165,7 @@ def _pull(model: str) -> None:
                     _emit(key)
         job["state"] = "done"
     except Exception as e:  # noqa: BLE001
-        job.update(state="error", error=str(e)[:200])
+        job.update(state="error", error=str(e)[:200], ended=time.time())
     _emit(key)
 
 
@@ -168,11 +177,35 @@ def download(names: list[str]) -> dict:
                 if model not in OLLAMA or (_jobs.get(n) or {}).get("state") == "running":
                     continue
                 _jobs[n] = {"state": "running", "done": 0, "total": 0, "error": None}
+                _emit(n)
                 threading.Thread(target=_pull, args=(model,), name=f"pull-{model}", daemon=True).start()
             elif n in CATALOG and not present(n) and (_jobs.get(n) or {}).get("state") != "running":
                 _jobs[n] = {"state": "running", "done": 0, "total": 0, "error": None}
+                _emit(n)
                 threading.Thread(target=_download, args=(n,), name=f"model-{n}", daemon=True).start()
     return status()
+
+
+def job_state(key: str) -> str | None:
+    """running, done or error for a download of this run, else None."""
+    return (_jobs.get(key) or {}).get("state")
+
+
+def busy(name: str) -> bool:
+    """True while this run downloads the model: some of its files are here, some are not yet."""
+    return job_state(name) == "running"
+
+
+def label(key: str) -> str:
+    name = key.split(":", 1)[1] if key.startswith("ollama:") else key
+    spec = OLLAMA.get(name) if key.startswith("ollama:") else CATALOG.get(name)
+    return spec["label"] if spec else name
+
+
+def jobs() -> list[dict]:
+    """The running and the failed downloads of this run, for the status line. It asks Ollama nothing."""
+    return [{"key": k, "label": label(k), **{x: j.get(x) for x in ("state", "done", "total", "error")}}
+            for k, j in list(_jobs.items()) if j["state"] in ("running", "error")]
 
 
 def ollama_has(model: str, names: set[str] | None) -> bool:

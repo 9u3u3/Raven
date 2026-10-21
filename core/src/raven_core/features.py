@@ -12,13 +12,15 @@ recommends the largest variant that runs well. The user can pick any variant and
 "Not recommended" choice gets a warning, not a block.
 
 apply() turns the features on or off (the lite.py switches), sets the chosen variants and starts the
-downloads. A download that needs Ollama waits until Ollama runs (resume()).
+downloads. The "features_pending" setting keeps every chosen model until it is here, so loop() starts it
+again after a quit or a network error, and starts an Ollama model once Ollama runs (resume()).
 """
 
 from __future__ import annotations
 
 import logging
 import shutil
+import time
 
 from . import db, device, lite, models, setup
 
@@ -296,23 +298,55 @@ def apply(on: dict[str, bool], variants: dict[str, str] | None = None) -> dict:
     missing = [n for n in dict.fromkeys(want_names) if not present.get(n)]
     now = [n for n in missing if not n.startswith("ollama:") or ollama_running]
     waiting = [n for n in missing if n not in now]
-    db.set_setting("features_pending", waiting)
+    db.set_setting("features_pending", missing)
     if now:
         models.download(now)
     return {"reembed": reembed, "downloads": now, "waiting": waiting}
 
 
+# A failed download starts again after this many seconds (a network error, a full disk).
+RETRY_S = 120
+
+
 def resume() -> list[str]:
-    """Start the downloads that waited for Ollama, once it runs."""
+    """Start the chosen downloads that do not run: after a quit, after an error, and once Ollama runs.
+    A model that is here leaves the list."""
     pending = db.get_setting("features_pending") or []
     if not pending:
         return []
-    _present, _jobs, ollama_running = _presence()
-    if not ollama_running:
-        return []
-    db.set_setting("features_pending", [])
-    models.download(pending)
-    return pending
+    present, jobs, ollama_running = _presence()
+    left = [n for n in pending if not present.get(n)]
+    if left != pending:
+        db.set_setting("features_pending", left)
+    start = []
+    for n in left:
+        job = jobs.get(n) or {}
+        if job.get("state") == "running" or (n.startswith("ollama:") and not ollama_running):
+            continue
+        if job.get("state") == "error" and time.time() - (job.get("ended") or 0) < RETRY_S:
+            continue
+        start.append(n)
+    if start:
+        log.info("resume downloads: %s", ", ".join(start))
+        models.download(start)
+    return start
+
+
+def waiting() -> list[dict]:
+    """The chosen models with no download in this run yet: most wait for Ollama, the rest for loop()."""
+    pending = db.get_setting("features_pending") or []
+    return [{"key": n, "label": models.label(n), "ollama": n.startswith("ollama:")} for n in pending if not models.job_state(n)]
+
+
+def loop(stop) -> None:
+    """Keep the chosen downloads going in the background, while Raven runs."""
+    while True:
+        try:
+            resume()
+        except Exception:  # noqa: BLE001
+            log.exception("resume downloads")
+        if stop.wait(20):
+            return
 
 
 def remove(fid: str, variant: str | None = None) -> dict:
@@ -333,6 +367,8 @@ def remove(fid: str, variant: str | None = None) -> dict:
             names = [n for n in names if n not in keep]
     for n in names:
         models.remove(n)
+    pending = db.get_setting("features_pending") or []
+    db.set_setting("features_pending", [n for n in pending if n not in names])
     if f.get("switch") and ("variants" not in f or variant == current_variant(fid)):
         lite.set_feature(f["switch"], False)
     return {"removed": names}
