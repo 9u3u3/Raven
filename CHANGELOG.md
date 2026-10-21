@@ -5,6 +5,20 @@ A PATCH step only fixes problems. A beta build adds `-beta.N` (for example `0.3.
 `core/src/raven_core/config.py`, `core/pyproject.toml` and `app/package.json` hold the same version.
 `tests/test_release_build.py` checks this.
 
+## 0.3.0-beta.4 (2026-10-21)
+
+### Changed
+
+- Model downloads go on in the background. After a quit or a network error, Raven starts them again and continues
+  from the part that is already on disk. A failed download tries again after 2 minutes. An Ollama model starts
+  when Ollama runs.
+- The status line shows the model downloads. Click it to open Settings, Features and models.
+- The image and speech stages start when their model is here. You do not need to restart Raven.
+
+### Fixed
+
+- The setup screen: the Start bar covered the AI mode and the AI providers steps.
+
 ## 0.3.0-beta.3 (2026-10-20)
 
 ### New
